@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PMSMA डैशबोर्ड | उदयपुर</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tiro+Devanagari+Hindi&family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Firebase (compat SDK) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<!-- Charts + Excel export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+:root{
+  --lake:#0E5E63;
+  --lake-dark:#0A4448;
+  --navy:#113B4C;
+  --sandstone:#B8863B;
+  --sandstone-light:#EADFC4;
+  --marble:#F6F3EC;
+  --paper:#FFFFFF;
+  --ink:#1D2B2E;
+  --ink-soft:#4C5B5D;
+  --maroon:#7A2E2E;
+  --green:#2E7D5B;
+  --line:#DDD6C4;
+  --radius:10px;
+  --shadow:0 1px 3px rgba(17,59,76,0.08), 0 1px 2px rgba(17,59,76,0.06);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--marble);
+  color:var(--ink);
+  font-family:'Noto Sans','Noto Sans Devanagari',sans-serif;
+  min-height:100vh;
+}
+h1,h2,h3,.display{
+  font-family:'Tiro Devanagari Hindi','Noto Sans Devanagari',Georgia,serif;
+  color:var(--navy);
+  font-weight:400;
+  letter-spacing:0.2px;
+}
+.mono{font-family:'Roboto Mono',monospace;}
+a{color:var(--lake);}
+button{font-family:inherit;cursor:pointer;}
+input,select{font-family:inherit;}
+
+/* ---------- Lake ripple divider ---------- */
+.ripple{
+  height:14px;width:100%;
+  background:
+    linear-gradient(135deg, var(--lake) 25%, transparent 25%) -8px 0,
+    linear-gradient(225deg, var(--lake) 25%, transparent 25%) -8px 0,
+    linear-gradient(315deg, var(--lake) 25%, transparent 25%),
+    linear-gradient(45deg, var(--lake) 25%, transparent 25%);
+  background-size:16px 16px;
+  opacity:0.85;
+}
+
+/* ---------- Login ---------- */
+#loginScreen{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(184,134,59,0.10), transparent 45%),
+    radial-gradient(circle at 80% 75%, rgba(14,94,99,0.15), transparent 50%),
+    var(--navy);
+  padding:24px;
+}
+.login-card{
+  background:var(--paper);
+  width:100%;
+  max-width:420px;
+  border-radius:14px;
+  box-shadow:0 20px 60px rgba(0,0,0,0.35);
+  overflow:hidden;
+}
+.login-head{
+  background:linear-gradient(135deg,var(--lake),var(--lake-dark));
+  color:#fff;
+  padding:28px 28px 20px;
+  text-align:center;
+}
+.login-head h1{color:#fff;font-size:26px;margin:6px 0 2px;}
+.login-head p{margin:0;font-size:13px;opacity:0.85;}
+.login-body{padding:24px 28px 28px;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:13px;color:var(--ink-soft);margin-bottom:6px;font-weight:600;}
+.field input, .field select{
+  width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;
+  font-size:15px;background:var(--marble);color:var(--ink);
+}
+.field input:focus, .field select:focus{outline:2px solid var(--lake);outline-offset:1px;background:#fff;}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:11px 18px;border-radius:8px;border:none;font-size:15px;font-weight:600;
+  background:var(--lake);color:#fff;transition:background .15s ease;
+}
+.btn:hover{background:var(--lake-dark);}
+.btn.block{width:100%;}
+.btn.secondary{background:var(--sandstone-light);color:var(--navy);}
+.btn.secondary:hover{background:#e0d0a4;}
+.btn.danger{background:var(--maroon);}
+.btn.danger:hover{background:#5f2323;}
+.btn.ghost{background:transparent;color:var(--lake);border:1px solid var(--lake);}
+#loginError{color:var(--maroon);font-size:13px;margin-top:10px;min-height:16px;}
+.hint{font-size:12px;color:var(--ink-soft);margin-top:14px;text-align:center;}
+
+/* ---------- App shell ---------- */
+#app{display:none;min-height:100vh;flex-direction:column;}
+header.topbar{
+  background:var(--navy);color:#fff;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;height:60px;flex-wrap:wrap;
+}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand .mark{
+  width:34px;height:34px;border-radius:50%;
+  background:conic-gradient(from 210deg,var(--sandstone),var(--lake),var(--sandstone));
+  display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:13px;
+}
+.brand span.title{font-family:'Tiro Devanagari Hindi',serif;font-size:19px;}
+.userbox{display:flex;align-items:center;gap:12px;font-size:13px;}
+.role-badge{
+  background:var(--sandstone);color:var(--navy);padding:4px 10px;border-radius:20px;font-weight:700;font-size:11px;letter-spacing:0.4px;text-transform:uppercase;
+}
+nav.tabs{
+  background:var(--lake-dark);display:flex;gap:2px;padding:0 14px;overflow-x:auto;
+}
+nav.tabs button{
+  background:transparent;border:none;color:rgba(255,255,255,0.75);
+  padding:13px 16px;font-size:14px;font-weight:600;white-space:nowrap;border-bottom:3px solid transparent;
+}
+nav.tabs button.active{color:#fff;border-bottom-color:var(--sandstone);}
+main{flex:1;padding:22px;max-width:1400px;width:100%;margin:0 auto;}
+.view{display:none;}
+.view.active{display:block;}
+
+.card{background:var(--paper);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:18px;border:1px solid var(--line);}
+.card h2{margin:0 0 4px;font-size:20px;}
+.card .sub{color:var(--ink-soft);font-size:13px;margin-bottom:16px;}
+
+.grid{display:grid;gap:14px;}
+.grid.cols-2{grid-template-columns:repeat(2,1fr);}
+.grid.cols-3{grid-template-columns:repeat(3,1fr);}
+.grid.cols-4{grid-template-columns:repeat(4,1fr);}
+@media(max-width:900px){.grid.cols-2,.grid.cols-3,.grid.cols-4{grid-template-columns:1fr 1fr;}}
+@media(max-width:600px){.grid.cols-2,.grid.cols-3,.grid.cols-4{grid-template-columns:1fr;}}
+
+.kpi{background:var(--marble);border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
+.kpi .num{font-family:'Roboto Mono',monospace;font-size:26px;font-weight:600;color:var(--navy);}
+.kpi .lbl{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+
+fieldset{border:1px solid var(--line);border-radius:10px;padding:14px 16px 16px;margin:0 0 16px;}
+legend{font-weight:700;color:var(--navy);padding:0 8px;font-size:14px;}
+
+table{width:100%;border-collapse:collapse;font-size:13px;}
+table th, table td{border:1px solid var(--line);padding:8px 10px;text-align:left;}
+table th{background:var(--sandstone-light);color:var(--navy);font-weight:700;position:sticky;top:0;}
+table tbody tr:hover{background:var(--marble);}
+.table-wrap{overflow-x:auto;max-height:520px;overflow-y:auto;border-radius:8px;border:1px solid var(--line);}
+
+.filters{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;}
+.filters select, .filters input{padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--marble);font-size:13px;}
+
+.chart-box{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px;}
+.chart-box h3{margin:0 0 10px;font-size:15px;color:var(--navy);}
+canvas{max-height:320px;}
+
+.toast{
+  position:fixed;bottom:20px;right:20px;background:var(--navy);color:#fff;padding:12px 18px;
+  border-radius:8px;box-shadow:var(--shadow);font-size:14px;z-index:999;opacity:0;transform:translateY(10px);
+  transition:all .25s ease;
+}
+.toast.show{opacity:1;transform:translateY(0);}
+.toast.err{background:var(--maroon);}
+.toast.ok{background:var(--green);}
+
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;}
+.badge.hrp{background:#F3E3E3;color:var(--maroon);}
+.badge.ok{background:#E2F0E9;color:var(--green);}
+
+.row-actions button{font-size:12px;padding:5px 9px;margin-right:4px;}
+.empty{text-align:center;padding:40px 20px;color:var(--ink-soft);}
+footer.appfoot{text-align:center;padding:16px;font-size:12px;color:var(--ink-soft);}
+.small{font-size:12px;color:var(--ink-soft);}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+@media(max-width:700px){.two-col{grid-template-columns:1fr;}}
+.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN SCREEN ============ -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-head">
+      <div style="font-size:30px;">🩺</div>
+      <h1>PMSMA डैशबोर्ड</h1>
+      <p>प्रधानमंत्री सुरक्षित मातृत्व अभियान — उदयपुर जिला</p>
+    </div>
+    <div class="login-body">
+      <div class="field">
+        <label>यूज़र आईडी (User ID)</label>
+        <input type="text" id="loginUser" autocomplete="username" placeholder="जैसे: facility_kherwara01">
+      </div>
+      <div class="field">
+        <label>पासवर्ड (Password)</label>
+        <input type="password" id="loginPass" autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <button class="btn block" id="loginBtn" onclick="doLogin()">लॉगिन करें / Login</button>
+      <div id="loginError"></div>
+      <div class="hint">पहली बार सेटअप कर रहे हैं? नीचे "प्रथम एडमिन बनाएं" देखें।<br>First-time setup? See "Create first admin" below index.html comments.</div>
+      <div style="text-align:center;margin-top:10px;">
+        <button class="btn ghost" style="font-size:12px;padding:6px 12px;" onclick="showFirstAdminSetup()">प्रथम Administrator खाता बनाएं</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MAIN APP ============ -->
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark">PM</div>
+      <span class="title">PMSMA डैशबोर्ड — उदयपुर</span>
+    </div>
+    <div class="userbox">
+      <span id="userNameDisplay"></span>
+      <span class="role-badge" id="roleBadge"></span>
+      <button class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="doLogout()">लॉगआउट</button>
+    </div>
+  </header>
+  <div class="ripple"></div>
+  <nav class="tabs" id="tabsNav"></nav>
+
+  <main>
+
+    <!-- DASHBOARD VIEW -->
+    <section class="view" id="view-dashboard">
+      <div class="card">
+        <h2>सारांश डैशबोर्ड</h2>
+        <div class="sub">Real-time data — सभी लॉगिन किए हुए यूज़र के अपडेट तुरंत यहाँ दिखते हैं</div>
+        <div class="filters">
+          <select id="fBlock"><option value="">सभी ब्लॉक</option></select>
+          <select id="fMonth"><option value="">सभी माह</option></select>
+          <select id="fFacility"><option value="">सभी फैसिलिटी</option></select>
+          <button class="btn secondary" style="font-size:12px;padding:8px 12px;" onclick="applyDashboardFilters()">फ़िल्टर लगाएं</button>
+          <button class="btn ghost" style="font-size:12px;padding:8px 12px;" onclick="resetDashboardFilters()">रीसेट</button>
+        </div>
+        <div class="grid cols-4" id="kpiRow"></div>
+      </div>
+
+      <div class="grid cols-2">
+        <div class="chart-box"><h3>फैसिलिटी वाइज़ — Targeted ANC vs Visited ANC</h3><canvas id="chartFacility"></canvas></div>
+        <div class="chart-box"><h3>ब्लॉक वाइज़ — विज़िटेड ANC</h3><canvas id="chartBlock"></canvas></div>
+        <div class="chart-box"><h3>माह वाइज़ ट्रेंड (Month wise)</h3><canvas id="chartMonth"></canvas></div>
+        <div class="chart-box"><h3>Investigation wise — Target vs Done</h3><canvas id="chartInvestigation"></canvas></div>
+      </div>
+      <div class="chart-box" style="margin-top:14px;">
+        <h3>HRP wise — पहचाने गए हाई रिस्क प्रेगनेंसी केस</h3>
+        <canvas id="chartHRP" style="max-height:420px;"></canvas>
+      </div>
+    </section>
+
+    <!-- DATA ENTRY VIEW -->
+    <section class="view" id="view-entry">
+      <div class="card">
+        <h2 id="entryFormTitle">नई PMSMA एंट्री</h2>
+        <div class="sub">फैसिलिटी लॉगिन से सीधे उसी फैसिलिटी के लिए एंट्री दर्ज होगी</div>
+        <form id="entryForm" onsubmit="return false;">
+
+          <fieldset>
+            <legend>मूल जानकारी (Basic Info)</legend>
+            <div class="grid cols-3">
+              <div class="field"><label>Name of the facility</label><input id="f_facility" required></div>
+              <div class="field"><label>Type of the facility</label>
+                <select id="f_facilityType">
+                  <option>SC</option><option>PHC</option><option>CHC</option><option>Sub-District Hospital</option><option>District Hospital</option><option>Urban PHC</option><option>Other</option>
+                </select>
+              </div>
+              <div class="field"><label>Block</label><input id="f_block" required></div>
+              <div class="field"><label>District</label><input id="f_district" value="Udaipur"></div>
+              <div class="field"><label>PMSMA Date</label><input type="date" id="f_pmsmaDate" required></div>
+              <div class="field"><label>Scheduled SC (1)</label><input id="f_sc1"></div>
+              <div class="field"><label>Scheduled SC (2)</label><input id="f_sc2"></div>
+              <div class="field"><label>Scheduled SC (3)</label><input id="f_sc3"></div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Targeted ANC</legend>
+            <div class="grid cols-4">
+              <div class="field"><label>Targeted ANC (Total)</label><input type="number" min="0" id="f_tANC"></div>
+              <div class="field"><label>First Trimester</label><input type="number" min="0" id="f_tANC_t1"></div>
+              <div class="field"><label>Second Trimester</label><input type="number" min="0" id="f_tANC_t2"></div>
+              <div class="field"><label>Third Trimester</label><input type="number" min="0" id="f_tANC_t3"></div>
+              <div class="field"><label>HRP</label><input type="number" min="0" id="f_tANC_hrp"></div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Visited ANC</legend>
+            <div class="grid cols-4">
+              <div class="field"><label>Visited ANC (Total)</label><input type="number" min="0" id="f_vANC"></div>
+              <div class="field"><label>First Trimester</label><input type="number" min="0" id="f_vANC_t1"></div>
+              <div class="field"><label>Second Trimester</label><input type="number" min="0" id="f_vANC_t2"></div>
+              <div class="field"><label>Third Trimester</label><input type="number" min="0" id="f_vANC_t3"></div>
+              <div class="field"><label>HRP</label><input type="number" min="0" id="f_vANC_hrp"></div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Investigation (Target / Done)</legend>
+            <div class="field"><label>Total Investigation Done</label><input type="number" min="0" id="f_totalInv" style="max-width:220px;"></div>
+            <div class="table-wrap" style="max-height:none;">
+              <table id="invTable">
+                <thead><tr><th>Investigation</th><th>Target</th><th>Done</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Examination (Target / Done)</legend>
+            <div class="table-wrap" style="max-height:none;">
+              <table id="examTable">
+                <thead><tr><th>Examination</th><th>Target</th><th>Done</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>HRP (High Risk Pregnancy) — पहचान व प्रबंधन</legend>
+            <div class="table-wrap" style="max-height:none;">
+              <table id="hrpTable">
+                <thead><tr><th>HRP Category</th><th>Identified (No.)</th><th>प्रबंधन / Referral विवरण</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </fieldset>
+
+          <div style="display:flex;gap:10px;">
+            <button class="btn" onclick="saveEntry()">सेव करें (Save)</button>
+            <button class="btn secondary" onclick="clearEntryForm()">फॉर्म साफ़ करें</button>
+            <span id="entrySavingMsg" class="small"></span>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- RECORDS VIEW -->
+    <section class="view" id="view-records">
+      <div class="card">
+        <h2>सभी एंट्री (Records)</h2>
+        <div class="sub">Real-time सूची — कोई भी अपडेट तुरंत सभी यूज़र को दिखेगा</div>
+        <div class="filters">
+          <select id="rFilterBlock"><option value="">सभी ब्लॉक</option></select>
+          <select id="rFilterMonth"><option value="">सभी माह</option></select>
+          <input type="text" id="rFilterSearch" placeholder="फैसिलिटी नाम खोजें...">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Facility</th><th>Block</th><th>Date</th><th>Targeted ANC</th><th>Visited ANC</th><th>HRP Cases</th><th>Entered By</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="recordsTbody"></tbody>
+          </table>
+        </div>
+        <div class="empty" id="recordsEmpty" style="display:none;">अभी कोई एंट्री नहीं है।</div>
+      </div>
+    </section>
+
+    <!-- USER MANAGEMENT (ADMIN ONLY) -->
+    <section class="view" id="view-users">
+      <div class="card">
+        <h2>यूज़र प्रबंधन (User Management)</h2>
+        <div class="sub">केवल Administrator — नए यूज़र बनाएं, भूमिका (role) तय करें</div>
+        <div class="grid cols-2">
+          <div>
+            <fieldset>
+              <legend>नया यूज़र बनाएं</legend>
+              <div class="field"><label>User ID (लॉगिन के लिए, यूनिक)</label><input id="nu_id" placeholder="facility_kherwara01"></div>
+              <div class="field"><label>पासवर्ड</label><input id="nu_pass" type="text" placeholder="कम से कम 6 अक्षर"></div>
+              <div class="field"><label>प्रदर्शित नाम (Display Name)</label><input id="nu_name"></div>
+              <div class="field"><label>भूमिका (Role)</label>
+                <select id="nu_role" onchange="toggleNewUserScopeFields()">
+                  <option value="facility">Facility (केवल एंट्री)</option>
+                  <option value="block">Block (ब्लॉक स्तर — देखें/संपादित)</option>
+                  <option value="district">District (जिला स्तर — देखें/संपादित)</option>
+                  <option value="admin">Administrator (सभी अधिकार)</option>
+                </select>
+              </div>
+              <div class="field" id="nu_facility_field"><label>फैसिलिटी नाम (Facility scope)</label><input id="nu_facilityName"></div>
+              <div class="field" id="nu_block_field"><label>ब्लॉक (Block scope)</label><input id="nu_blockName"></div>
+              <button class="btn" onclick="createUser()">यूज़र बनाएं</button>
+              <div id="nuMsg" class="small" style="margin-top:8px;"></div>
+            </fieldset>
+          </div>
+          <div>
+            <fieldset>
+              <legend>मौजूदा यूज़र</legend>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>User ID</th><th>नाम</th><th>Role</th><th>Scope</th><th>Actions</th></tr></thead>
+                  <tbody id="usersTbody"></tbody>
+                </table>
+              </div>
+            </fieldset>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- REPORTS VIEW -->
+    <section class="view" id="view-reports">
+      <div class="card">
+        <h2>रिपोर्ट डाउनलोड (Reports)</h2>
+        <div class="sub">पूरा डेटा या फ़िल्टर किया हुआ डेटा Excel (.xlsx) में डाउनलोड करें</div>
+        <div class="filters">
+          <select id="repBlock"><option value="">सभी ब्लॉक</option></select>
+          <select id="repMonth"><option value="">सभी माह</option></select>
+        </div>
+        <button class="btn" onclick="downloadReport()">📥 Excel रिपोर्ट डाउनलोड करें</button>
+      </div>
+    </section>
+
+  </main>
+  <footer class="appfoot">PMSMA डैशबोर्ड · उदयपुर जिला · Firebase real-time sync</footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================================
+   PMSMA MULTI-USER REAL-TIME DASHBOARD
+   -------------------------------------------------------------------------
+   HOW TO SET THIS UP (पूरी हिंदी गाइड index-guide.md फ़ाइल में भी है):
+   1. https://console.firebase.google.com पर जाकर एक नया प्रोजेक्ट बनाएं (मुफ़्त)।
+   2. Build > Firestore Database > Create database (production mode, कोई भी region)।
+   3. Project settings (⚙️) > General > "Your apps" > Web (</>) आइकॉन पर क्लिक कर एक
+      web app जोड़ें। वहाँ से मिला हुआ firebaseConfig नीचे paste करें।
+   4. Firestore > Rules में नीचे बताए rules paste करें (गाइड फ़ाइल देखें)।
+   5. इस पूरे फोल्डर को GitHub repository में अपलोड करें और Settings > Pages से
+      GitHub Pages enable करें — आपकी वेब ऐप मुफ़्त में लाइव हो जाएगी।
+   ========================================================================= */
+
+// ----- 1. FIREBASE CONFIG: यहाँ अपना config paste करें -----
+const firebaseConfig = {
+  apiKey: "AIzaSyAB-tcpPtjFx6Ajd38bG5wr9gv9DOOagN8",
+  authDomain: "pmsmaudaipur-checklist.firebaseapp.com",
+  databaseURL: "https://pmsmaudaipur-checklist-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "pmsmaudaipur-checklist",
+  storageBucket: "pmsmaudaipur-checklist.firebasestorage.app",
+  messagingSenderId: "1059367729277",
+  appId: "1:1059367729277:web:d6077731d81247ba505914"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ----- Config lists (from official PMSMA checklist) -----
+const INVESTIGATIONS = ["Hb","Urine albumine","Glucose","HIV (If status unidentified)","Syphilis","Malaria test","Blood group"];
+const EXAMINATIONS = ["BP measured","Weight","PA done","Height"];
+const HRP_CATEGORIES = [
+  {key:"severeAnemia", label:"Severe anemia", extra:"Referred to Higher Center (No.)"},
+  {key:"mildModerateAnemia", label:"Mild & Moderate anemia", extra:"Iron sucrose / FCM / IFA given (details)"},
+  {key:"pih", label:"Pregnancy Induced Hypertension", extra:"Medicine given / managed (details)"},
+  {key:"reactiveHIV", label:"Reactive for HIV", extra:"Referred to Higher Center for ART (No.)"},
+  {key:"syphilisHRP", label:"Syphilis", extra:"Medicine given / managed (details)"},
+  {key:"tb", label:"Tuberculosis", extra:"Medicine given / managed (details)"},
+  {key:"malariaHRP", label:"Malaria", extra:"Counselling done for delivery at higher center (No.)"},
+  {key:"previousLSCS", label:"Previous LSCS", extra:""},
+  {key:"hepB", label:"Hepatitis B", extra:""},
+  {key:"badObstetric", label:"Bad Obstetric History", extra:""},
+  {key:"teenage", label:"Teenage Pregnancy", extra:""},
+  {key:"highFever", label:"High Fever", extra:""},
+  {key:"rtiSti", label:"RTI/STI", extra:""},
+  {key:"stillBirth", label:"H/O Still Birth", extra:""},
+  {key:"congenitalMalformation", label:"Congenital Malformation", extra:""},
+  {key:"rhNegative", label:"RH Negative Blood Group of Mother", extra:""},
+  {key:"twins", label:"Twins / Multiple pregnancy", extra:""},
+  {key:"grandMultipara", label:"Grand Multipara", extra:""},
+  {key:"shortStature", label:"Short Stature", extra:""}
+];
+
+// ----- Session state -----
+let currentUser = null; // {id, name, role, facilityName, blockName}
+let entriesCache = [];
+let usersCache = [];
+let unsubEntries = null, unsubUsers = null;
+let charts = {};
+
+// ---------------------------------------------------------------------
+// AUTH (Firestore-based simple username/password — no Firebase Auth
+// account needed, so admin can create facility/block/district users
+// instantly without email verification).
+// ---------------------------------------------------------------------
+function showToast(msg, type){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' '+type : '');
+  setTimeout(()=>{ t.className='toast'; }, 3200);
+}
+
+async function doLogin(){
+  const id = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  const errBox = document.getElementById('loginError');
+  errBox.textContent = '';
+  if(!id || !pass){ errBox.textContent = 'कृपया User ID और Password भरें।'; return; }
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> कृपया प्रतीक्षा करें...';
+  try{
+    const doc = await db.collection('users').doc(id).get();
+    if(!doc.exists){ throw new Error('यूज़र आईडी नहीं मिली।'); }
+    const u = doc.data();
+    if(u.password !== pass){ throw new Error('पासवर्ड गलत है।'); }
+    currentUser = { id, name: u.name || id, role: u.role, facilityName: u.facilityName||'', blockName: u.blockName||'' };
+    sessionStorage.setItem('pmsma_user', JSON.stringify(currentUser));
+    enterApp();
+  }catch(e){
+    errBox.textContent = e.message || 'लॉगिन विफल।';
+  }finally{
+    btn.disabled = false; btn.innerHTML = 'लॉगिन करें / Login';
+  }
+}
+
+function doLogout(){
+  currentUser = null;
+  sessionStorage.removeItem('pmsma_user');
+  if(unsubEntries) unsubEntries();
+  if(unsubUsers) unsubUsers();
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loginUser').value=''; document.getElementById('loginPass').value='';
+}
+
+async function showFirstAdminSetup(){
+  const existing = await db.collection('users').limit(1).get();
+  if(!existing.empty){
+    alert('पहले से यूज़र मौजूद हैं। यदि आप Administrator हैं तो सामान्य लॉगिन करें, या मौजूदा एडमिन से नया यूज़र बनवाएं।');
+    return;
+  }
+  const id = prompt('प्रथम Administrator के लिए User ID दर्ज करें:');
+  if(!id) return;
+  const pass = prompt('पासवर्ड दर्ज करें (कम से कम 6 अक्षर):');
+  if(!pass || pass.length<6){ alert('पासवर्ड कम से कम 6 अक्षर का होना चाहिए।'); return; }
+  const name = prompt('प्रदर्शित नाम दर्ज करें:') || id;
+  await db.collection('users').doc(id).set({ password: pass, name, role: 'admin', facilityName:'', blockName:'', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+  alert('Administrator खाता बन गया। अब उसी ID/Password से लॉगिन करें।');
+  document.getElementById('loginUser').value = id;
+}
+
+// Restore session on reload
+window.addEventListener('load', ()=>{
+  const saved = sessionStorage.getItem('pmsma_user');
+  if(saved){ currentUser = JSON.parse(saved); enterApp(); }
+});
+
+// ---------------------------------------------------------------------
+// APP SHELL / NAV
+// ---------------------------------------------------------------------
+function tabsForRole(role){
+  const all = [
+    {id:'dashboard', label:'डैशबोर्ड'},
+    {id:'entry', label:'नई एंट्री', roles:['facility','block','district','admin']},
+    {id:'records', label:'सभी एंट्री'},
+    {id:'users', label:'यूज़र प्रबंधन', roles:['admin']},
+    {id:'reports', label:'रिपोर्ट', roles:['district','admin']}
+  ];
+  return all.filter(t => !t.roles || t.roles.includes(role));
+}
+
+function enterApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('userNameDisplay').textContent = currentUser.name;
+  const roleLabels = {facility:'Facility', block:'Block', district:'District', admin:'Administrator'};
+  document.getElementById('roleBadge').textContent = roleLabels[currentUser.role] || currentUser.role;
+
+  const nav = document.getElementById('tabsNav');
+  nav.innerHTML = '';
+  const tabs = tabsForRole(currentUser.role);
+  tabs.forEach((t,i)=>{
+    const b = document.createElement('button');
+    b.textContent = t.label;
+    b.onclick = ()=> switchView(t.id);
+    b.id = 'tabbtn-'+t.id;
+    if(i===0) b.classList.add('active');
+    nav.appendChild(b);
+  });
+  switchView(tabs[0].id);
+
+  buildInvExamHrpTables();
+  if(currentUser.role === 'facility'){
+    document.getElementById('f_facility').value = currentUser.facilityName;
+    document.getElementById('f_facility').readOnly = true;
+    document.getElementById('f_block').value = currentUser.blockName;
+    document.getElementById('f_block').readOnly = true;
+  }
+  if(currentUser.role === 'block'){
+    document.getElementById('f_block').value = currentUser.blockName;
+  }
+
+  listenEntries();
+  if(currentUser.role === 'admin') listenUsers();
+}
+
+function switchView(id){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+id).classList.add('active');
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+  const btn = document.getElementById('tabbtn-'+id);
+  if(btn) btn.classList.add('active');
+  if(id === 'dashboard') renderDashboard();
+}
+
+// ---------------------------------------------------------------------
+// BUILD DYNAMIC TABLE ROWS (Investigation / Examination / HRP)
+// ---------------------------------------------------------------------
+function buildInvExamHrpTables(){
+  const invBody = document.querySelector('#invTable tbody');
+  invBody.innerHTML = '';
+  INVESTIGATIONS.forEach(name=>{
+    const key = slug(name);
+    invBody.innerHTML += `<tr><td>${name}</td>
+      <td><input type="number" min="0" id="inv_${key}_target" style="width:90px;"></td>
+      <td><input type="number" min="0" id="inv_${key}_done" style="width:90px;"></td></tr>`;
+  });
+
+  const examBody = document.querySelector('#examTable tbody');
+  examBody.innerHTML = '';
+  EXAMINATIONS.forEach(name=>{
+    const key = slug(name);
+    examBody.innerHTML += `<tr><td>${name}</td>
+      <td><input type="number" min="0" id="exam_${key}_target" style="width:90px;"></td>
+      <td><input type="number" min="0" id="exam_${key}_done" style="width:90px;"></td></tr>`;
+  });
+
+  const hrpBody = document.querySelector('#hrpTable tbody');
+  hrpBody.innerHTML = '';
+  HRP_CATEGORIES.forEach(h=>{
+    hrpBody.innerHTML += `<tr><td>${h.label}</td>
+      <td><input type="number" min="0" id="hrp_${h.key}_count" style="width:90px;"></td>
+      <td><input type="text" id="hrp_${h.key}_extra" placeholder="${h.extra}" style="width:100%;"></td></tr>`;
+  });
+}
+function slug(s){ return s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
+
+// ---------------------------------------------------------------------
+// SAVE ENTRY
+// ---------------------------------------------------------------------
+async function saveEntry(){
+  const facility = document.getElementById('f_facility').value.trim();
+  const block = document.getElementById('f_block').value.trim();
+  const pmsmaDate = document.getElementById('f_pmsmaDate').value;
+  if(!facility || !block || !pmsmaDate){
+    showToast('कृपया Facility, Block व Date भरें।', 'err'); return;
+  }
+  const month = pmsmaDate.slice(0,7); // YYYY-MM
+
+  const investigations = {};
+  INVESTIGATIONS.forEach(name=>{
+    const key = slug(name);
+    investigations[key] = {
+      label: name,
+      target: numval('inv_'+key+'_target'),
+      done: numval('inv_'+key+'_done')
+    };
+  });
+  const examinations = {};
+  EXAMINATIONS.forEach(name=>{
+    const key = slug(name);
+    examinations[key] = {
+      label: name,
+      target: numval('exam_'+key+'_target'),
+      done: numval('exam_'+key+'_done')
+    };
+  });
+  const hrp = {};
+  HRP_CATEGORIES.forEach(h=>{
+    hrp[h.key] = {
+      label: h.label,
+      count: numval('hrp_'+h.key+'_count'),
+      extra: (document.getElementById('hrp_'+h.key+'_extra').value||'').trim()
+    };
+  });
+
+  const data = {
+    facility, block,
+    facilityType: document.getElementById('f_facilityType').value,
+    district: document.getElementById('f_district').value.trim() || 'Udaipur',
+    pmsmaDate, month,
+    scheduledSC: [
+      document.getElementById('f_sc1').value.trim(),
+      document.getElementById('f_sc2').value.trim(),
+      document.getElementById('f_sc3').value.trim()
+    ],
+    targetedANC: numval('f_tANC'),
+    targetedANC_t1: numval('f_tANC_t1'),
+    targetedANC_t2: numval('f_tANC_t2'),
+    targetedANC_t3: numval('f_tANC_t3'),
+    targetedANC_hrp: numval('f_tANC_hrp'),
+    visitedANC: numval('f_vANC'),
+    visitedANC_t1: numval('f_vANC_t1'),
+    visitedANC_t2: numval('f_vANC_t2'),
+    visitedANC_t3: numval('f_vANC_t3'),
+    visitedANC_hrp: numval('f_vANC_hrp'),
+    totalInvestigation: numval('f_totalInv'),
+    investigations, examinations, hrp,
+    enteredBy: currentUser.id,
+    enteredByName: currentUser.name,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  const editingId = document.getElementById('entryForm').dataset.editingId;
+  const msgEl = document.getElementById('entrySavingMsg');
+  msgEl.textContent = 'सेव हो रहा है...';
+  try{
+    if(editingId){
+      await db.collection('entries').doc(editingId).update(data);
+      showToast('एंट्री अपडेट हो गई।', 'ok');
+    }else{
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('entries').add(data);
+      showToast('एंट्री सेव हो गई।', 'ok');
+    }
+    clearEntryForm();
+    switchView('records');
+  }catch(e){
+    showToast('त्रुटि: '+e.message, 'err');
+  }
+  msgEl.textContent = '';
+}
+
+function numval(id){
+  const v = document.getElementById(id).value;
+  return v === '' ? 0 : Number(v);
+}
+
+function clearEntryForm(){
+  document.getElementById('entryForm').reset();
+  delete document.getElementById('entryForm').dataset.editingId;
+  document.getElementById('entryFormTitle').textContent = 'नई PMSMA एंट्री';
+  if(currentUser.role === 'facility'){
+    document.getElementById('f_facility').value = currentUser.facilityName;
+    document.getElementById('f_block').value = currentUser.blockName;
+  }
+  if(currentUser.role === 'block'){
+    document.getElementById('f_block').value = currentUser.blockName;
+  }
+}
+
+function editEntry(id){
+  const e = entriesCache.find(x=>x.id===id);
+  if(!e) return;
+  switchView('entry');
+  document.getElementById('entryFormTitle').textContent = 'एंट्री संपादित करें (Edit)';
+  document.getElementById('entryForm').dataset.editingId = id;
+  document.getElementById('f_facility').value = e.facility||'';
+  document.getElementById('f_facilityType').value = e.facilityType||'SC';
+  document.getElementById('f_block').value = e.block||'';
+  document.getElementById('f_district').value = e.district||'Udaipur';
+  document.getElementById('f_pmsmaDate').value = e.pmsmaDate||'';
+  document.getElementById('f_sc1').value = (e.scheduledSC||[])[0]||'';
+  document.getElementById('f_sc2').value = (e.scheduledSC||[])[1]||'';
+  document.getElementById('f_sc3').value = (e.scheduledSC||[])[2]||'';
+  document.getElementById('f_tANC').value = e.targetedANC||0;
+  document.getElementById('f_tANC_t1').value = e.targetedANC_t1||0;
+  document.getElementById('f_tANC_t2').value = e.targetedANC_t2||0;
+  document.getElementById('f_tANC_t3').value = e.targetedANC_t3||0;
+  document.getElementById('f_tANC_hrp').value = e.targetedANC_hrp||0;
+  document.getElementById('f_vANC').value = e.visitedANC||0;
+  document.getElementById('f_vANC_t1').value = e.visitedANC_t1||0;
+  document.getElementById('f_vANC_t2').value = e.visitedANC_t2||0;
+  document.getElementById('f_vANC_t3').value = e.visitedANC_t3||0;
+  document.getElementById('f_vANC_hrp').value = e.visitedANC_hrp||0;
+  document.getElementById('f_totalInv').value = e.totalInvestigation||0;
+
+  INVESTIGATIONS.forEach(name=>{
+    const key = slug(name);
+    const d = (e.investigations||{})[key] || {};
+    document.getElementById('inv_'+key+'_target').value = d.target||0;
+    document.getElementById('inv_'+key+'_done').value = d.done||0;
+  });
+  EXAMINATIONS.forEach(name=>{
+    const key = slug(name);
+    const d = (e.examinations||{})[key] || {};
+    document.getElementById('exam_'+key+'_target').value = d.target||0;
+    document.getElementById('exam_'+key+'_done').value = d.done||0;
+  });
+  HRP_CATEGORIES.forEach(h=>{
+    const d = (e.hrp||{})[h.key] || {};
+    document.getElementById('hrp_'+h.key+'_count').value = d.count||0;
+    document.getElementById('hrp_'+h.key+'_extra').value = d.extra||'';
+  });
+}
+
+async function deleteEntry(id){
+  if(!confirm('क्या आप वाकई इस एंट्री को हटाना चाहते हैं?')) return;
+  try{
+    await db.collection('entries').doc(id).delete();
+    showToast('एंट्री हटा दी गई।', 'ok');
+  }catch(e){ showToast('त्रुटि: '+e.message, 'err'); }
+}
+
+// ---------------------------------------------------------------------
+// REALTIME LISTENERS
+// ---------------------------------------------------------------------
+function listenEntries(){
+  if(unsubEntries) unsubEntries();
+  let q = db.collection('entries');
+  if(currentUser.role === 'facility'){
+    q = q.where('facility','==', currentUser.facilityName);
+  }else if(currentUser.role === 'block'){
+    q = q.where('block','==', currentUser.blockName);
+  }
+  unsubEntries = q.onSnapshot(snap=>{
+    entriesCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    populateFilterOptions();
+    renderRecords();
+    if(document.getElementById('view-dashboard').classList.contains('active')) renderDashboard();
+  }, err=>{
+    showToast('डेटा लोड त्रुटि: '+err.message, 'err');
+  });
+}
+
+function listenUsers(){
+  if(unsubUsers) unsubUsers();
+  unsubUsers = db.collection('users').onSnapshot(snap=>{
+    usersCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderUsersTable();
+  });
+}
+
+// ---------------------------------------------------------------------
+// RECORDS TABLE
+// ---------------------------------------------------------------------
+function populateFilterOptions(){
+  const blocks = [...new Set(entriesCache.map(e=>e.block).filter(Boolean))].sort();
+  const months = [...new Set(entriesCache.map(e=>e.month).filter(Boolean))].sort();
+  const facilities = [...new Set(entriesCache.map(e=>e.facility).filter(Boolean))].sort();
+  fillSelect('fBlock', blocks); fillSelect('fMonth', months); fillSelect('fFacility', facilities);
+  fillSelect('rFilterBlock', blocks); fillSelect('rFilterMonth', months);
+  fillSelect('repBlock', blocks); fillSelect('repMonth', months);
+}
+function fillSelect(id, values){
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">'+sel.options[0].textContent+'</option>' +
+    values.map(v=>`<option value="${v}">${v}</option>`).join('');
+  if(values.includes(cur)) sel.value = cur;
+}
+
+function renderRecords(){
+  const blockF = document.getElementById('rFilterBlock').value;
+  const monthF = document.getElementById('rFilterMonth').value;
+  const searchF = (document.getElementById('rFilterSearch').value||'').toLowerCase();
+  const rows = entriesCache.filter(e=>
+    (!blockF || e.block===blockF) &&
+    (!monthF || e.month===monthF) &&
+    (!searchF || (e.facility||'').toLowerCase().includes(searchF))
+  ).sort((a,b)=> (b.pmsmaDate||'').localeCompare(a.pmsmaDate||''));
+
+  const tbody = document.getElementById('recordsTbody');
+  document.getElementById('recordsEmpty').style.display = rows.length ? 'none' : 'block';
+  const canEdit = ['block','district','admin'].includes(currentUser.role) || currentUser.role==='facility';
+  const canDelete = ['admin'].includes(currentUser.role);
+
+  tbody.innerHTML = rows.map(e=>{
+    const hrpTotal = Object.values(e.hrp||{}).reduce((s,h)=>s+(h.count||0),0);
+    let actions = `<button class="btn secondary" style="padding:5px 9px;font-size:12px;" onclick="editEntry('${e.id}')">View/Edit</button>`;
+    if(canDelete) actions += `<button class="btn danger" style="padding:5px 9px;font-size:12px;" onclick="deleteEntry('${e.id}')">Delete</button>`;
+    return `<tr>
+      <td>${e.facility||''}</td>
+      <td>${e.block||''}</td>
+      <td>${e.pmsmaDate||''}</td>
+      <td>${e.targetedANC||0}</td>
+      <td>${e.visitedANC||0}</td>
+      <td>${hrpTotal ? `<span class="badge hrp">${hrpTotal}</span>` : '0'}</td>
+      <td>${e.enteredByName||e.enteredBy||''}</td>
+      <td class="row-actions">${actions}</td>
+    </tr>`;
+  }).join('');
+}
+document.addEventListener('input', (ev)=>{
+  if(['rFilterSearch'].includes(ev.target.id)) renderRecords();
+});
+document.addEventListener('change', (ev)=>{
+  if(['rFilterBlock','rFilterMonth'].includes(ev.target.id)) renderRecords();
+});
+
+// ---------------------------------------------------------------------
+// DASHBOARD
+// ---------------------------------------------------------------------
+function applyDashboardFilters(){ renderDashboard(); }
+function resetDashboardFilters(){
+  document.getElementById('fBlock').value='';
+  document.getElementById('fMonth').value='';
+  document.getElementById('fFacility').value='';
+  renderDashboard();
+}
+
+function filteredEntries(){
+  const b = document.getElementById('fBlock').value;
+  const m = document.getElementById('fMonth').value;
+  const f = document.getElementById('fFacility').value;
+  return entriesCache.filter(e=> (!b||e.block===b) && (!m||e.month===m) && (!f||e.facility===f) );
+}
+
+function renderDashboard(){
+  const rows = filteredEntries();
+
+  // KPIs
+  const sum = (arr, key) => arr.reduce((s,e)=>s+(e[key]||0),0);
+  const totalHRP = rows.reduce((s,e)=> s + Object.values(e.hrp||{}).reduce((a,h)=>a+(h.count||0),0), 0);
+  const kpis = [
+    {lbl:'कुल एंट्री (Entries)', num: rows.length},
+    {lbl:'Targeted ANC', num: sum(rows,'targetedANC')},
+    {lbl:'Visited ANC', num: sum(rows,'visitedANC')},
+    {lbl:'कुल HRP केस', num: totalHRP}
+  ];
+  document.getElementById('kpiRow').innerHTML = kpis.map(k=>`<div class="kpi"><div class="num">${k.num}</div><div class="lbl">${k.lbl}</div></div>`).join('');
+
+  // Facility wise
+  const byFacility = groupSum(rows, 'facility', ['targetedANC','visitedANC']);
+  renderBarChart('chartFacility', Object.keys(byFacility), [
+    {label:'Targeted ANC', data: Object.values(byFacility).map(v=>v.targetedANC), color:'#B8863B'},
+    {label:'Visited ANC', data: Object.values(byFacility).map(v=>v.visitedANC), color:'#0E5E63'}
+  ]);
+
+  // Block wise
+  const byBlock = groupSum(rows, 'block', ['visitedANC']);
+  renderBarChart('chartBlock', Object.keys(byBlock), [
+    {label:'Visited ANC', data: Object.values(byBlock).map(v=>v.visitedANC), color:'#0E5E63'}
+  ]);
+
+  // Month wise
+  const byMonth = groupSum(rows, 'month', ['targetedANC','visitedANC']);
+  const monthKeys = Object.keys(byMonth).sort();
+  renderLineChart('chartMonth', monthKeys, [
+    {label:'Targeted ANC', data: monthKeys.map(k=>byMonth[k].targetedANC), color:'#B8863B'},
+    {label:'Visited ANC', data: monthKeys.map(k=>byMonth[k].visitedANC), color:'#0E5E63'}
+  ]);
+
+  // Investigation wise
+  const invTarget = {}, invDone = {};
+  INVESTIGATIONS.forEach(name=>{ invTarget[name]=0; invDone[name]=0; });
+  rows.forEach(e=>{
+    INVESTIGATIONS.forEach(name=>{
+      const key = slug(name);
+      const d = (e.investigations||{})[key];
+      if(d){ invTarget[name]+=(d.target||0); invDone[name]+=(d.done||0); }
+    });
+  });
+  renderBarChart('chartInvestigation', INVESTIGATIONS, [
+    {label:'Target', data: INVESTIGATIONS.map(n=>invTarget[n]), color:'#B8863B'},
+    {label:'Done', data: INVESTIGATIONS.map(n=>invDone[n]), color:'#2E7D5B'}
+  ]);
+
+  // HRP wise
+  const hrpCounts = {};
+  HRP_CATEGORIES.forEach(h=> hrpCounts[h.label]=0 );
+  rows.forEach(e=>{
+    HRP_CATEGORIES.forEach(h=>{
+      const d = (e.hrp||{})[h.key];
+      if(d) hrpCounts[h.label]+=(d.count||0);
+    });
+  });
+  renderBarChart('chartHRP', Object.keys(hrpCounts), [
+    {label:'पहचाने गए केस (Identified)', data: Object.values(hrpCounts), color:'#7A2E2E'}
+  ], true);
+}
+
+function groupSum(rows, groupKey, sumKeys){
+  const out = {};
+  rows.forEach(e=>{
+    const g = e[groupKey] || 'N/A';
+    if(!out[g]) out[g] = Object.fromEntries(sumKeys.map(k=>[k,0]));
+    sumKeys.forEach(k=> out[g][k] += (e[k]||0) );
+  });
+  return out;
+}
+
+function renderBarChart(canvasId, labels, datasets, horizontal){
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  if(charts[canvasId]) charts[canvasId].destroy();
+  charts[canvasId] = new Chart(ctx, {
+    type:'bar',
+    data:{ labels, datasets: datasets.map(d=>({label:d.label,data:d.data,backgroundColor:d.color})) },
+    options:{
+      indexAxis: horizontal ? 'y' : 'x',
+      responsive:true,
+      plugins:{legend:{display: datasets.length>1, position:'bottom'}},
+      scales:{ x:{ticks:{autoSkip:false}}, y:{beginAtZero:true} }
+    }
+  });
+}
+function renderLineChart(canvasId, labels, datasets){
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  if(charts[canvasId]) charts[canvasId].destroy();
+  charts[canvasId] = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets: datasets.map(d=>({label:d.label,data:d.data,borderColor:d.color,backgroundColor:d.color,tension:0.3})) },
+    options:{ responsive:true, plugins:{legend:{position:'bottom'}}, scales:{y:{beginAtZero:true}} }
+  });
+}
+
+// ---------------------------------------------------------------------
+// USER MANAGEMENT (admin only)
+// ---------------------------------------------------------------------
+function toggleNewUserScopeFields(){
+  const role = document.getElementById('nu_role').value;
+  document.getElementById('nu_facility_field').style.display = role==='facility' ? 'block':'none';
+  document.getElementById('nu_block_field').style.display = (role==='facility'||role==='block') ? 'block':'none';
+}
+toggleNewUserScopeFields();
+
+async function createUser(){
+  const id = document.getElementById('nu_id').value.trim();
+  const pass = document.getElementById('nu_pass').value;
+  const name = document.getElementById('nu_name').value.trim() || id;
+  const role = document.getElementById('nu_role').value;
+  const facilityName = document.getElementById('nu_facilityName').value.trim();
+  const blockName = document.getElementById('nu_blockName').value.trim();
+  const msg = document.getElementById('nuMsg');
+  if(!id || !pass || pass.length<6){ msg.textContent = 'User ID व कम से कम 6 अक्षर का पासवर्ड आवश्यक है।'; msg.style.color='var(--maroon)'; return; }
+  try{
+    const existing = await db.collection('users').doc(id).get();
+    if(existing.exists){ msg.textContent='यह User ID पहले से मौजूद है।'; msg.style.color='var(--maroon)'; return; }
+    await db.collection('users').doc(id).set({
+      password: pass, name, role, facilityName, blockName,
+      createdBy: currentUser.id, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    msg.textContent = 'यूज़र सफलतापूर्वक बन गया।'; msg.style.color='var(--green)';
+    document.getElementById('nu_id').value=''; document.getElementById('nu_pass').value='';
+    document.getElementById('nu_name').value=''; document.getElementById('nu_facilityName').value='';
+    document.getElementById('nu_blockName').value='';
+  }catch(e){ msg.textContent = 'त्रुटि: '+e.message; msg.style.color='var(--maroon)'; }
+}
+
+function renderUsersTable(){
+  const tbody = document.getElementById('usersTbody');
+  const roleLabels = {facility:'Facility', block:'Block', district:'District', admin:'Administrator'};
+  tbody.innerHTML = usersCache.map(u=>`<tr>
+    <td class="mono">${u.id}</td>
+    <td>${u.name||''}</td>
+    <td>${roleLabels[u.role]||u.role}</td>
+    <td>${u.facilityName||u.blockName||'—'}</td>
+    <td class="row-actions">
+      ${u.id !== currentUser.id ? `<button class="btn danger" style="padding:5px 9px;font-size:12px;" onclick="deleteUser('${u.id}')">हटाएं</button>` : '<span class="small">(आप)</span>'}
+    </td>
+  </tr>`).join('');
+}
+async function deleteUser(id){
+  if(!confirm('क्या आप वाकई इस यूज़र को हटाना चाहते हैं?')) return;
+  await db.collection('users').doc(id).delete();
+  showToast('यूज़र हटा दिया गया।', 'ok');
+}
+
+// ---------------------------------------------------------------------
+// EXCEL REPORT DOWNLOAD
+// ---------------------------------------------------------------------
+function downloadReport(){
+  const b = document.getElementById('repBlock').value;
+  const m = document.getElementById('repMonth').value;
+  const rows = entriesCache.filter(e=> (!b||e.block===b) && (!m||e.month===m) );
+  if(!rows.length){ showToast('कोई डेटा नहीं मिला।', 'err'); return; }
+
+  const sheetRows = rows.map(e=>{
+    const base = {
+      'Facility': e.facility, 'Facility Type': e.facilityType, 'Block': e.block, 'District': e.district,
+      'PMSMA Date': e.pmsmaDate, 'Month': e.month,
+      'Scheduled SC 1': (e.scheduledSC||[])[0]||'', 'Scheduled SC 2': (e.scheduledSC||[])[1]||'', 'Scheduled SC 3': (e.scheduledSC||[])[2]||'',
+      'Targeted ANC': e.targetedANC, 'Targeted ANC T1': e.targetedANC_t1, 'Targeted ANC T2': e.targetedANC_t2, 'Targeted ANC T3': e.targetedANC_t3, 'Targeted ANC HRP': e.targetedANC_hrp,
+      'Visited ANC': e.visitedANC, 'Visited ANC T1': e.visitedANC_t1, 'Visited ANC T2': e.visitedANC_t2, 'Visited ANC T3': e.visitedANC_t3, 'Visited ANC HRP': e.visitedANC_hrp,
+      'Total Investigation Done': e.totalInvestigation,
+      'Entered By': e.enteredByName||e.enteredBy
+    };
+    INVESTIGATIONS.forEach(name=>{
+      const d = (e.investigations||{})[slug(name)] || {};
+      base[name+' Target'] = d.target||0; base[name+' Done'] = d.done||0;
+    });
+    EXAMINATIONS.forEach(name=>{
+      const d = (e.examinations||{})[slug(name)] || {};
+      base[name+' Target'] = d.target||0; base[name+' Done'] = d.done||0;
+    });
+    HRP_CATEGORIES.forEach(h=>{
+      const d = (e.hrp||{})[h.key] || {};
+      base[h.label+' (No.)'] = d.count||0; base[h.label+' Details'] = d.extra||'';
+    });
+    return base;
+  });
+
+  const ws = XLSX.utils.json_to_sheet(sheetRows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'PMSMA Report');
+  XLSX.writeFile(wb, `PMSMA_Report_${b||'AllBlocks'}_${m||'AllMonths'}.xlsx`);
+}
+
+</script>
+</body>
+</html>
