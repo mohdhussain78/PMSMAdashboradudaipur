@@ -102,6 +102,9 @@ input,select{font-family:inherit;}
   font-size:15px;background:var(--marble);color:var(--ink);
 }
 .field input:focus, .field select:focus{outline:2px solid var(--lake);outline-offset:1px;background:#fff;}
+input.invalid{border-color:var(--maroon)!important;background:#FBEAEA!important;}
+.sum-ok{color:var(--green);}
+.sum-bad{color:var(--maroon);font-weight:700;}
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
   padding:11px 18px;border-radius:8px;border:none;font-size:15px;font-weight:600;
@@ -309,6 +312,7 @@ footer.appfoot{text-align:center;padding:16px;font-size:12px;color:var(--ink-sof
               <div class="field"><label>Third Trimester</label><input type="number" min="0" id="f_tANC_t3"></div>
               <div class="field"><label>HRP</label><input type="number" min="0" id="f_tANC_hrp"></div>
             </div>
+            <div class="small" id="tANCSumIndicator">त्रिमास योग: 0 / Total: 0</div>
           </fieldset>
 
           <fieldset>
@@ -320,11 +324,13 @@ footer.appfoot{text-align:center;padding:16px;font-size:12px;color:var(--ink-sof
               <div class="field"><label>Third Trimester</label><input type="number" min="0" id="f_vANC_t3"></div>
               <div class="field"><label>HRP</label><input type="number" min="0" id="f_vANC_hrp"></div>
             </div>
+            <div class="small" id="vANCSumIndicator">त्रिमास योग: 0 / Total Visited: 0 / Total Targeted: 0</div>
           </fieldset>
 
           <fieldset>
             <legend>Investigation (Target / Done)</legend>
             <div class="field"><label>Total Investigation Done</label><input type="number" min="0" id="f_totalInv" style="max-width:220px;"></div>
+            <div class="small">"Done" संख्या Total Visited ANC से अधिक नहीं हो सकती — अधिक होने पर बॉक्स लाल दिखेगा।</div>
             <div class="table-wrap" style="max-height:none;">
               <table id="invTable">
                 <thead><tr><th>Investigation</th><th>Target</th><th>Done</th></tr></thead>
@@ -344,15 +350,16 @@ footer.appfoot{text-align:center;padding:16px;font-size:12px;color:var(--ink-sof
           </fieldset>
 
           <fieldset>
-            <legend>HRP (High Risk Pregnancy) — पहचान व प्रबंधन</legend>
+            <legend>HRP (High Risk Pregnancy) — पहचान व प्रबंधन/outcome</legend>
             <div class="table-wrap" style="max-height:none;">
               <table id="hrpTable">
-                <thead><tr><th>HRP Category</th><th>Identified (No.)</th><th>प्रबंधन / Referral विवरण</th></tr></thead>
+                <thead><tr><th>HRP Category</th><th>Identified (No.)</th><th>प्रबंधन / Outcome</th><th>Remarks</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
           </fieldset>
 
+          <div id="entryValidationErrors" class="small" style="color:var(--maroon);margin-bottom:10px;"></div>
           <div style="display:flex;gap:10px;">
             <button class="btn" onclick="saveEntry()">सेव करें (Save)</button>
             <button class="btn secondary" onclick="clearEntryForm()">फॉर्म साफ़ करें</button>
@@ -475,26 +482,57 @@ const db = firebase.firestore();
 // ----- Config lists (from official PMSMA checklist) -----
 const INVESTIGATIONS = ["Hb","Urine albumine","Glucose","HIV (If status unidentified)","Syphilis","Malaria test","Blood group"];
 const EXAMINATIONS = ["BP measured","Weight","PA done","Height"];
+// Each HRP category has an "identified" count plus one or more structured
+// outcome fields (what was actually done for those identified cases), so
+// that management/referral of every HRP case is tracked, not just its count.
 const HRP_CATEGORIES = [
-  {key:"severeAnemia", label:"Severe anemia", extra:"Referred to Higher Center (No.)"},
-  {key:"mildModerateAnemia", label:"Mild & Moderate anemia", extra:"Iron sucrose / FCM / IFA given (details)"},
-  {key:"pih", label:"Pregnancy Induced Hypertension", extra:"Medicine given / managed (details)"},
-  {key:"reactiveHIV", label:"Reactive for HIV", extra:"Referred to Higher Center for ART (No.)"},
-  {key:"syphilisHRP", label:"Syphilis", extra:"Medicine given / managed (details)"},
-  {key:"tb", label:"Tuberculosis", extra:"Medicine given / managed (details)"},
-  {key:"malariaHRP", label:"Malaria", extra:"Counselling done for delivery at higher center (No.)"},
-  {key:"previousLSCS", label:"Previous LSCS", extra:""},
-  {key:"hepB", label:"Hepatitis B", extra:""},
-  {key:"badObstetric", label:"Bad Obstetric History", extra:""},
-  {key:"teenage", label:"Teenage Pregnancy", extra:""},
-  {key:"highFever", label:"High Fever", extra:""},
-  {key:"rtiSti", label:"RTI/STI", extra:""},
-  {key:"stillBirth", label:"H/O Still Birth", extra:""},
-  {key:"congenitalMalformation", label:"Congenital Malformation", extra:""},
-  {key:"rhNegative", label:"RH Negative Blood Group of Mother", extra:""},
-  {key:"twins", label:"Twins / Multiple pregnancy", extra:""},
-  {key:"grandMultipara", label:"Grand Multipara", extra:""},
-  {key:"shortStature", label:"Short Stature", extra:""}
+  {key:"severeAnemia", label:"Severe Anemia (Hb < 7)", identifiedLabel:"पहचाने गए (No.)", outcomes:[
+    {key:"bloodTransfusion", label:"Blood Transfusion हेतु Refer किया (No.)"},
+    {key:"referredHigherCenter", label:"Higher Center Refer किया (No.)"}
+  ]},
+  {key:"moderateAnemia", label:"Moderate Anemia (Hb 7 – 9.9)", identifiedLabel:"पहचाने गए (No.)", outcomes:[
+    {key:"ivSucrose", label:"IV Sucrose दिया गया (No.)"},
+    {key:"fcm", label:"FCM दिया गया (No.)"}
+  ]},
+  {key:"normalHb", label:"Normal Hb (Hb ≥ 10)", identifiedLabel:"कुल महिलाएं (No.)", outcomes:[
+    {key:"ifaGiven", label:"IFA गोलियां दी गईं (No.)"}
+  ]},
+  {key:"pih", label:"Hypertension / PIH (BP ≥ 140/90)", identifiedLabel:"पहचाने गए (No.)", outcomes:[
+    {key:"medicineGiven", label:"Medicine दी गई (No.)"},
+    {key:"referredHigherCenter", label:"Higher Center Refer किया (No.)"}
+  ]},
+  {key:"diabetes", label:"Diabetes / GDM", identifiedLabel:"पहचाने गए (No.)", outcomes:[
+    {key:"medicineGiven", label:"Medicine / Insulin दी गई (No.)"},
+    {key:"counsellingDone", label:"Counselling की गई (No.)"}
+  ]},
+  {key:"reactiveHIV", label:"Reactive for HIV", identifiedLabel:"पहचाने गए (No.)", outcomes:[
+    {key:"referredART", label:"ART हेतु Higher Center Refer किया (No.)"}
+  ]},
+  {key:"syphilisHRP", label:"Syphilis (Reactive)", identifiedLabel:"पहचाने गए (No.)", outcomes:[
+    {key:"medicineGiven", label:"Medicine दी गई (No.)"}
+  ]},
+  {key:"tb", label:"Tuberculosis", identifiedLabel:"पहचाने गए (No.)", outcomes:[
+    {key:"medicineGiven", label:"DOTS / Medicine शुरू किया (No.)"}
+  ]},
+  {key:"malariaHRP", label:"Malaria", identifiedLabel:"पहचाने गए (No.)", outcomes:[
+    {key:"counsellingDone", label:"संस्थागत प्रसव हेतु Counselling (No.)"},
+    {key:"medicineGiven", label:"Medicine दी गई (No.)"}
+  ]},
+  {key:"previousLSCS", label:"Previous LSCS / Pre C-Sec", identifiedLabel:"पहचाने गए (No.)", outcomes:[
+    {key:"counsellingDone", label:"संस्थागत प्रसव हेतु Counselling (No.)"},
+    {key:"referredHigherCenter", label:"Higher Center Refer किया (No.)"}
+  ]},
+  {key:"hepB", label:"Hepatitis B", identifiedLabel:"पहचाने गए (No.)", outcomes:[{key:"managed", label:"प्रबंधित / Referred (No.)"}]},
+  {key:"badObstetric", label:"Bad Obstetric History", identifiedLabel:"पहचाने गए (No.)", outcomes:[{key:"managed", label:"Counselled (No.)"}]},
+  {key:"teenage", label:"Teenage Pregnancy", identifiedLabel:"पहचाने गए (No.)", outcomes:[{key:"managed", label:"Counselled (No.)"}]},
+  {key:"highFever", label:"High Fever", identifiedLabel:"पहचाने गए (No.)", outcomes:[{key:"managed", label:"Medicine / Referred (No.)"}]},
+  {key:"rtiSti", label:"RTI/STI", identifiedLabel:"पहचाने गए (No.)", outcomes:[{key:"managed", label:"Medicine दी गई (No.)"}]},
+  {key:"stillBirth", label:"H/O Still Birth", identifiedLabel:"पहचाने गए (No.)", outcomes:[{key:"managed", label:"Counselled (No.)"}]},
+  {key:"congenitalMalformation", label:"Congenital Malformation", identifiedLabel:"पहचाने गए (No.)", outcomes:[{key:"managed", label:"Referred (No.)"}]},
+  {key:"rhNegative", label:"RH Negative Blood Group of Mother", identifiedLabel:"पहचाने गए (No.)", outcomes:[{key:"managed", label:"Anti-D / Managed (No.)"}]},
+  {key:"twins", label:"Twins / Multiple Pregnancy", identifiedLabel:"पहचाने गए (No.)", outcomes:[{key:"managed", label:"Counselled / Referred (No.)"}]},
+  {key:"grandMultipara", label:"Grand Multipara", identifiedLabel:"पहचाने गए (No.)", outcomes:[{key:"managed", label:"Counselled (No.)"}]},
+  {key:"shortStature", label:"Short Stature", identifiedLabel:"पहचाने गए (No.)", outcomes:[{key:"managed", label:"Counselled (No.)"}]}
 ];
 
 // ----- Session state -----
@@ -639,7 +677,7 @@ function buildInvExamHrpTables(){
     const key = slug(name);
     invBody.innerHTML += `<tr><td>${name}</td>
       <td><input type="number" min="0" id="inv_${key}_target" style="width:90px;"></td>
-      <td><input type="number" min="0" id="inv_${key}_done" style="width:90px;"></td></tr>`;
+      <td><input type="number" min="0" id="inv_${key}_done" style="width:90px;" oninput="checkInvExamCounts()"></td></tr>`;
   });
 
   const examBody = document.querySelector('#examTable tbody');
@@ -648,18 +686,87 @@ function buildInvExamHrpTables(){
     const key = slug(name);
     examBody.innerHTML += `<tr><td>${name}</td>
       <td><input type="number" min="0" id="exam_${key}_target" style="width:90px;"></td>
-      <td><input type="number" min="0" id="exam_${key}_done" style="width:90px;"></td></tr>`;
+      <td><input type="number" min="0" id="exam_${key}_done" style="width:90px;" oninput="checkInvExamCounts()"></td></tr>`;
   });
 
   const hrpBody = document.querySelector('#hrpTable tbody');
   hrpBody.innerHTML = '';
   HRP_CATEGORIES.forEach(h=>{
-    hrpBody.innerHTML += `<tr><td>${h.label}</td>
-      <td><input type="number" min="0" id="hrp_${h.key}_count" style="width:90px;"></td>
-      <td><input type="text" id="hrp_${h.key}_extra" placeholder="${h.extra}" style="width:100%;"></td></tr>`;
+    const outcomeInputs = (h.outcomes||[]).map(o=>
+      `<div style="margin-bottom:6px;"><label class="small" style="display:block;margin-bottom:2px;">${o.label}</label>
+       <input type="number" min="0" id="hrp_${h.key}_${o.key}" style="width:110px;"></div>`
+    ).join('');
+    hrpBody.innerHTML += `<tr>
+      <td>${h.label}</td>
+      <td style="vertical-align:top;"><input type="number" min="0" id="hrp_${h.key}_identified" style="width:90px;"></td>
+      <td style="vertical-align:top;">${outcomeInputs}</td>
+      <td style="vertical-align:top;"><input type="text" id="hrp_${h.key}_remarks" placeholder="Remarks" style="width:100%;"></td>
+    </tr>`;
   });
+
+  // Live validation listeners
+  ['f_tANC','f_tANC_t1','f_tANC_t2','f_tANC_t3','f_vANC','f_vANC_t1','f_vANC_t2','f_vANC_t3'].forEach(id=>{
+    document.getElementById(id).oninput = ()=>{ updateSumIndicators(); checkInvExamCounts(); };
+  });
+  updateSumIndicators();
 }
 function slug(s){ return s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
+
+// ---------------------------------------------------------------------
+// LIVE VALIDATION HELPERS
+// ---------------------------------------------------------------------
+function updateSumIndicators(){
+  const tANC = numval('f_tANC');
+  const tSum = numval('f_tANC_t1') + numval('f_tANC_t2') + numval('f_tANC_t3');
+  const tEl = document.getElementById('tANCSumIndicator');
+  tEl.innerHTML = `त्रिमास योग: ${tSum} / Total Targeted: ${tANC}` + (tSum>tANC ? ' <span class="sum-bad">⚠ योग Total से अधिक है</span>' : ' <span class="sum-ok">✓</span>');
+
+  const vANC = numval('f_vANC');
+  const vSum = numval('f_vANC_t1') + numval('f_vANC_t2') + numval('f_vANC_t3');
+  const vEl = document.getElementById('vANCSumIndicator');
+  let vMsg = `त्रिमास योग: ${vSum} / Total Visited: ${vANC} / Total Targeted: ${tANC}`;
+  if(vSum>vANC || vANC>tANC){ vMsg += ' <span class="sum-bad">⚠ सीमा से अधिक है</span>'; } else { vMsg += ' <span class="sum-ok">✓</span>'; }
+  vEl.innerHTML = vMsg;
+}
+
+function checkInvExamCounts(){
+  const vANC = numval('f_vANC');
+  INVESTIGATIONS.forEach(name=>{
+    const key = slug(name);
+    const el = document.getElementById('inv_'+key+'_done');
+    if(el) el.classList.toggle('invalid', numval('inv_'+key+'_done') > vANC);
+  });
+  EXAMINATIONS.forEach(name=>{
+    const key = slug(name);
+    const el = document.getElementById('exam_'+key+'_done');
+    if(el) el.classList.toggle('invalid', numval('exam_'+key+'_done') > vANC);
+  });
+}
+
+// Cross-field validation run on Save. Returns an array of Hindi error strings.
+function validateEntry(){
+  const errors = [];
+  const tANC = numval('f_tANC');
+  const tSum = numval('f_tANC_t1') + numval('f_tANC_t2') + numval('f_tANC_t3');
+  const vANC = numval('f_vANC');
+  const vSum = numval('f_vANC_t1') + numval('f_vANC_t2') + numval('f_vANC_t3');
+
+  if(tSum > tANC) errors.push('तीनों trimester के Targeted ANC का योग ('+tSum+'), Total Targeted ANC ('+tANC+') से अधिक है।');
+  if(vSum > vANC) errors.push('तीनों trimester के Visited ANC का योग ('+vSum+'), Total Visited ANC ('+vANC+') से अधिक है।');
+  if(vANC > tANC) errors.push('Total Visited ANC ('+vANC+'), Total Targeted ANC ('+tANC+') से अधिक नहीं हो सकता।');
+
+  INVESTIGATIONS.forEach(name=>{
+    const key = slug(name);
+    const done = numval('inv_'+key+'_done');
+    if(done > vANC) errors.push(name+' की Done संख्या ('+done+'), Total Visited ANC ('+vANC+') से अधिक है।');
+  });
+  EXAMINATIONS.forEach(name=>{
+    const key = slug(name);
+    const done = numval('exam_'+key+'_done');
+    if(done > vANC) errors.push(name+' की Done संख्या ('+done+'), Total Visited ANC ('+vANC+') से अधिक है।');
+  });
+  return errors;
+}
 
 // ---------------------------------------------------------------------
 // SAVE ENTRY
@@ -671,6 +778,16 @@ async function saveEntry(){
   if(!facility || !block || !pmsmaDate){
     showToast('कृपया Facility, Block व Date भरें।', 'err'); return;
   }
+
+  const errBox = document.getElementById('entryValidationErrors');
+  const errors = validateEntry();
+  if(errors.length){
+    errBox.innerHTML = '⚠ कृपया निम्न त्रुटियाँ ठीक करें:<br>' + errors.map(e=>'• '+e).join('<br>');
+    showToast('कुछ संख्याएं सीमा से अधिक हैं — कृपया ठीक करें।', 'err');
+    return;
+  }
+  errBox.innerHTML = '';
+
   const month = pmsmaDate.slice(0,7); // YYYY-MM
 
   const investigations = {};
@@ -693,10 +810,15 @@ async function saveEntry(){
   });
   const hrp = {};
   HRP_CATEGORIES.forEach(h=>{
+    const outcomes = {};
+    (h.outcomes||[]).forEach(o=>{
+      outcomes[o.key] = numval('hrp_'+h.key+'_'+o.key);
+    });
     hrp[h.key] = {
       label: h.label,
-      count: numval('hrp_'+h.key+'_count'),
-      extra: (document.getElementById('hrp_'+h.key+'_extra').value||'').trim()
+      identified: numval('hrp_'+h.key+'_identified'),
+      outcomes,
+      remarks: (document.getElementById('hrp_'+h.key+'_remarks').value||'').trim()
     };
   });
 
@@ -756,6 +878,7 @@ function clearEntryForm(){
   document.getElementById('entryForm').reset();
   delete document.getElementById('entryForm').dataset.editingId;
   document.getElementById('entryFormTitle').textContent = 'नई PMSMA एंट्री';
+  document.getElementById('entryValidationErrors').innerHTML = '';
   if(currentUser.role === 'facility'){
     document.getElementById('f_facility').value = currentUser.facilityName;
     document.getElementById('f_block').value = currentUser.blockName;
@@ -763,6 +886,8 @@ function clearEntryForm(){
   if(currentUser.role === 'block'){
     document.getElementById('f_block').value = currentUser.blockName;
   }
+  updateSumIndicators();
+  checkInvExamCounts();
 }
 
 function editEntry(id){
@@ -805,9 +930,16 @@ function editEntry(id){
   });
   HRP_CATEGORIES.forEach(h=>{
     const d = (e.hrp||{})[h.key] || {};
-    document.getElementById('hrp_'+h.key+'_count').value = d.count||0;
-    document.getElementById('hrp_'+h.key+'_extra').value = d.extra||'';
+    document.getElementById('hrp_'+h.key+'_identified').value = d.identified||0;
+    (h.outcomes||[]).forEach(o=>{
+      const el = document.getElementById('hrp_'+h.key+'_'+o.key);
+      if(el) el.value = (d.outcomes||{})[o.key] || 0;
+    });
+    document.getElementById('hrp_'+h.key+'_remarks').value = d.remarks||'';
   });
+  document.getElementById('entryValidationErrors').innerHTML = '';
+  updateSumIndicators();
+  checkInvExamCounts();
 }
 
 async function deleteEntry(id){
@@ -882,7 +1014,7 @@ function renderRecords(){
   const canDelete = ['admin'].includes(currentUser.role);
 
   tbody.innerHTML = rows.map(e=>{
-    const hrpTotal = Object.values(e.hrp||{}).reduce((s,h)=>s+(h.count||0),0);
+    const hrpTotal = Object.values(e.hrp||{}).reduce((s,h)=>s+(h.identified||0),0);
     let actions = `<button class="btn secondary" style="padding:5px 9px;font-size:12px;" onclick="editEntry('${e.id}')">View/Edit</button>`;
     if(canDelete) actions += `<button class="btn danger" style="padding:5px 9px;font-size:12px;" onclick="deleteEntry('${e.id}')">Delete</button>`;
     return `<tr>
@@ -927,7 +1059,7 @@ function renderDashboard(){
 
   // KPIs
   const sum = (arr, key) => arr.reduce((s,e)=>s+(e[key]||0),0);
-  const totalHRP = rows.reduce((s,e)=> s + Object.values(e.hrp||{}).reduce((a,h)=>a+(h.count||0),0), 0);
+  const totalHRP = rows.reduce((s,e)=> s + Object.values(e.hrp||{}).reduce((a,h)=>a+(h.identified||0),0), 0);
   const kpis = [
     {lbl:'कुल एंट्री (Entries)', num: rows.length},
     {lbl:'Targeted ANC', num: sum(rows,'targetedANC')},
@@ -978,7 +1110,7 @@ function renderDashboard(){
   rows.forEach(e=>{
     HRP_CATEGORIES.forEach(h=>{
       const d = (e.hrp||{})[h.key];
-      if(d) hrpCounts[h.label]+=(d.count||0);
+      if(d) hrpCounts[h.label]+=(d.identified||0);
     });
   });
   renderBarChart('chartHRP', Object.keys(hrpCounts), [
@@ -1101,7 +1233,11 @@ function downloadReport(){
     });
     HRP_CATEGORIES.forEach(h=>{
       const d = (e.hrp||{})[h.key] || {};
-      base[h.label+' (No.)'] = d.count||0; base[h.label+' Details'] = d.extra||'';
+      base[h.label+' - Identified (No.)'] = d.identified||0;
+      (h.outcomes||[]).forEach(o=>{
+        base[h.label+' - '+o.label] = (d.outcomes||{})[o.key] || 0;
+      });
+      base[h.label+' - Remarks'] = d.remarks||'';
     });
     return base;
   });
