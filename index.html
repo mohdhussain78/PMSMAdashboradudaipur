@@ -641,9 +641,17 @@ function enterApp(){
     if(i===0) b.classList.add('active');
     nav.appendChild(b);
   });
-  switchView(tabs[0].id);
 
-  buildInvExamHrpTables();
+  // Build the entry-form tables and wire up validation FIRST, and wrap in
+  // try/catch, so that even if something later (e.g. charts) fails, the
+  // data-entry form is always usable.
+  try{
+    buildInvExamHrpTables();
+  }catch(e){
+    console.error('buildInvExamHrpTables failed:', e);
+    showToast('फॉर्म टेबल बनाने में त्रुटि — कृपया पेज रीलोड करें।', 'err');
+  }
+
   if(currentUser.role === 'facility'){
     document.getElementById('f_facility').value = currentUser.facilityName;
     document.getElementById('f_facility').readOnly = true;
@@ -656,6 +664,10 @@ function enterApp(){
 
   listenEntries();
   if(currentUser.role === 'admin') listenUsers();
+
+  // Switch to the default (dashboard) tab last — if chart rendering has any
+  // issue, it can no longer block the form setup above.
+  switchView(tabs[0].id);
 }
 
 function switchView(id){
@@ -664,7 +676,7 @@ function switchView(id){
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
   const btn = document.getElementById('tabbtn-'+id);
   if(btn) btn.classList.add('active');
-  if(id === 'dashboard') renderDashboard();
+  if(id === 'dashboard'){ try{ renderDashboard(); }catch(e){ console.error('renderDashboard error:', e); } }
 }
 
 // ---------------------------------------------------------------------
@@ -1129,27 +1141,33 @@ function groupSum(rows, groupKey, sumKeys){
 }
 
 function renderBarChart(canvasId, labels, datasets, horizontal){
-  const ctx = document.getElementById(canvasId).getContext('2d');
-  if(charts[canvasId]) charts[canvasId].destroy();
-  charts[canvasId] = new Chart(ctx, {
-    type:'bar',
-    data:{ labels, datasets: datasets.map(d=>({label:d.label,data:d.data,backgroundColor:d.color})) },
-    options:{
-      indexAxis: horizontal ? 'y' : 'x',
-      responsive:true,
-      plugins:{legend:{display: datasets.length>1, position:'bottom'}},
-      scales:{ x:{ticks:{autoSkip:false}}, y:{beginAtZero:true} }
-    }
-  });
+  if(typeof Chart === 'undefined'){ console.error('Chart.js not loaded — skipping chart', canvasId); return; }
+  try{
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    if(charts[canvasId]) charts[canvasId].destroy();
+    charts[canvasId] = new Chart(ctx, {
+      type:'bar',
+      data:{ labels, datasets: datasets.map(d=>({label:d.label,data:d.data,backgroundColor:d.color})) },
+      options:{
+        indexAxis: horizontal ? 'y' : 'x',
+        responsive:true,
+        plugins:{legend:{display: datasets.length>1, position:'bottom'}},
+        scales:{ x:{ticks:{autoSkip:false}}, y:{beginAtZero:true} }
+      }
+    });
+  }catch(e){ console.error('renderBarChart error for', canvasId, e); }
 }
 function renderLineChart(canvasId, labels, datasets){
-  const ctx = document.getElementById(canvasId).getContext('2d');
-  if(charts[canvasId]) charts[canvasId].destroy();
-  charts[canvasId] = new Chart(ctx, {
-    type:'line',
-    data:{ labels, datasets: datasets.map(d=>({label:d.label,data:d.data,borderColor:d.color,backgroundColor:d.color,tension:0.3})) },
-    options:{ responsive:true, plugins:{legend:{position:'bottom'}}, scales:{y:{beginAtZero:true}} }
-  });
+  if(typeof Chart === 'undefined'){ console.error('Chart.js not loaded — skipping chart', canvasId); return; }
+  try{
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    if(charts[canvasId]) charts[canvasId].destroy();
+    charts[canvasId] = new Chart(ctx, {
+      type:'line',
+      data:{ labels, datasets: datasets.map(d=>({label:d.label,data:d.data,borderColor:d.color,backgroundColor:d.color,tension:0.3})) },
+      options:{ responsive:true, plugins:{legend:{position:'bottom'}}, scales:{y:{beginAtZero:true}} }
+    });
+  }catch(e){ console.error('renderLineChart error for', canvasId, e); }
 }
 
 // ---------------------------------------------------------------------
