@@ -158,8 +158,9 @@ main{flex:1;padding:22px;max-width:1400px;width:100%;margin:0 auto;}
 .grid.cols-2{grid-template-columns:repeat(2,1fr);}
 .grid.cols-3{grid-template-columns:repeat(3,1fr);}
 .grid.cols-4{grid-template-columns:repeat(4,1fr);}
-@media(max-width:900px){.grid.cols-2,.grid.cols-3,.grid.cols-4{grid-template-columns:1fr 1fr;}}
-@media(max-width:600px){.grid.cols-2,.grid.cols-3,.grid.cols-4{grid-template-columns:1fr;}}
+.grid.cols-5{grid-template-columns:repeat(5,1fr);}
+@media(max-width:900px){.grid.cols-2,.grid.cols-3,.grid.cols-4,.grid.cols-5{grid-template-columns:1fr 1fr;}}
+@media(max-width:600px){.grid.cols-2,.grid.cols-3,.grid.cols-4,.grid.cols-5{grid-template-columns:1fr;}}
 
 .kpi{background:var(--marble);border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
 .kpi .num{font-family:'Roboto Mono',monospace;font-size:26px;font-weight:600;color:var(--navy);}
@@ -351,12 +352,14 @@ footer.appfoot{text-align:center;padding:16px;font-size:12px;color:var(--ink-sof
 
           <fieldset>
             <legend>HRP (High Risk Pregnancy) — पहचान व प्रबंधन/outcome</legend>
+            <div class="small">नोट: Normal Hb व Moderate Anemia को कुल HRP गिनती में नहीं जोड़ा जाता — ये सिर्फ़ Hb-outcome ट्रैकिंग के लिए हैं।</div>
             <div class="table-wrap" style="max-height:none;">
               <table id="hrpTable">
                 <thead><tr><th>HRP Category</th><th>Identified (No.)</th><th>प्रबंधन / Outcome</th><th>Remarks</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
+            <div class="small" id="hrpSumIndicator">HRP योग: 0 / Visited ANC में दर्ज HRP: 0</div>
           </fieldset>
 
           <div id="entryValidationErrors" class="small" style="color:var(--maroon);margin-bottom:10px;"></div>
@@ -490,11 +493,11 @@ const HRP_CATEGORIES = [
     {key:"bloodTransfusion", label:"Blood Transfusion हेतु Refer किया (No.)"},
     {key:"referredHigherCenter", label:"Higher Center Refer किया (No.)"}
   ]},
-  {key:"moderateAnemia", label:"Moderate Anemia (Hb 7 – 9.9)", identifiedLabel:"पहचाने गए (No.)", outcomes:[
+  {key:"moderateAnemia", label:"Moderate Anemia (Hb 7 – 9.9)", identifiedLabel:"पहचाने गए (No.)", countsTowardHRPTotal:false, outcomes:[
     {key:"ivSucrose", label:"IV Sucrose दिया गया (No.)"},
     {key:"fcm", label:"FCM दिया गया (No.)"}
   ]},
-  {key:"normalHb", label:"Normal Hb (Hb ≥ 10)", identifiedLabel:"कुल महिलाएं (No.)", outcomes:[
+  {key:"normalHb", label:"Normal Hb (Hb ≥ 10)", identifiedLabel:"कुल महिलाएं (No.)", countsTowardHRPTotal:false, outcomes:[
     {key:"ifaGiven", label:"IFA गोलियां दी गईं (No.)"}
   ]},
   {key:"pih", label:"Hypertension / PIH (BP ≥ 140/90)", identifiedLabel:"पहचाने गए (No.)", outcomes:[
@@ -710,19 +713,27 @@ function buildInvExamHrpTables(){
     ).join('');
     hrpBody.innerHTML += `<tr>
       <td>${h.label}</td>
-      <td style="vertical-align:top;"><input type="number" min="0" id="hrp_${h.key}_identified" style="width:90px;"></td>
+      <td style="vertical-align:top;"><input type="number" min="0" id="hrp_${h.key}_identified" style="width:90px;" oninput="updateHRPSumIndicator()"></td>
       <td style="vertical-align:top;">${outcomeInputs}</td>
       <td style="vertical-align:top;"><input type="text" id="hrp_${h.key}_remarks" placeholder="Remarks" style="width:100%;"></td>
     </tr>`;
   });
 
   // Live validation listeners
-  ['f_tANC','f_tANC_t1','f_tANC_t2','f_tANC_t3','f_vANC','f_vANC_t1','f_vANC_t2','f_vANC_t3'].forEach(id=>{
-    document.getElementById(id).oninput = ()=>{ updateSumIndicators(); checkInvExamCounts(); };
+  ['f_tANC','f_tANC_t1','f_tANC_t2','f_tANC_t3','f_vANC','f_vANC_t1','f_vANC_t2','f_vANC_t3','f_vANC_hrp'].forEach(id=>{
+    document.getElementById(id).oninput = ()=>{ updateSumIndicators(); checkInvExamCounts(); updateHRPSumIndicator(); };
   });
   updateSumIndicators();
+  updateHRPSumIndicator();
 }
 function slug(s){ return s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
+
+// HRP categories that count toward the overall HRP total (Normal Hb and
+// Moderate Anemia are tracked for outcome purposes but excluded, since
+// they are not counted as high-risk cases).
+function hrpCountableCategories(){
+  return HRP_CATEGORIES.filter(h => h.countsTowardHRPTotal !== false);
+}
 
 // ---------------------------------------------------------------------
 // LIVE VALIDATION HELPERS
@@ -739,6 +750,17 @@ function updateSumIndicators(){
   let vMsg = `त्रिमास योग: ${vSum} / Total Visited: ${vANC} / Total Targeted: ${tANC}`;
   if(vSum>vANC || vANC>tANC){ vMsg += ' <span class="sum-bad">⚠ सीमा से अधिक है</span>'; } else { vMsg += ' <span class="sum-ok">✓</span>'; }
   vEl.innerHTML = vMsg;
+}
+
+function updateHRPSumIndicator(){
+  const vhrp = numval('f_vANC_hrp');
+  let sum = 0;
+  hrpCountableCategories().forEach(h=>{ sum += numval('hrp_'+h.key+'_identified'); });
+  const el = document.getElementById('hrpSumIndicator');
+  if(!el) return;
+  let msg = `HRP योग: ${sum} / Visited ANC में दर्ज HRP: ${vhrp}`;
+  msg += (sum > vhrp) ? ' <span class="sum-bad">⚠ योग अधिक है</span>' : ' <span class="sum-ok">✓</span>';
+  el.innerHTML = msg;
 }
 
 function checkInvExamCounts(){
@@ -762,10 +784,15 @@ function validateEntry(){
   const tSum = numval('f_tANC_t1') + numval('f_tANC_t2') + numval('f_tANC_t3');
   const vANC = numval('f_vANC');
   const vSum = numval('f_vANC_t1') + numval('f_vANC_t2') + numval('f_vANC_t3');
+  const vHRP = numval('f_vANC_hrp');
 
   if(tSum > tANC) errors.push('तीनों trimester के Targeted ANC का योग ('+tSum+'), Total Targeted ANC ('+tANC+') से अधिक है।');
   if(vSum > vANC) errors.push('तीनों trimester के Visited ANC का योग ('+vSum+'), Total Visited ANC ('+vANC+') से अधिक है।');
   if(vANC > tANC) errors.push('Total Visited ANC ('+vANC+'), Total Targeted ANC ('+tANC+') से अधिक नहीं हो सकता।');
+
+  let hrpIdentifiedSum = 0;
+  hrpCountableCategories().forEach(h=>{ hrpIdentifiedSum += numval('hrp_'+h.key+'_identified'); });
+  if(hrpIdentifiedSum > vHRP) errors.push('सभी HRP श्रेणियों (Normal Hb व Moderate Anemia को छोड़कर) का योग ('+hrpIdentifiedSum+'), Visited ANC में दर्ज HRP संख्या ('+vHRP+') से अधिक है।');
 
   INVESTIGATIONS.forEach(name=>{
     const key = slug(name);
@@ -900,6 +927,7 @@ function clearEntryForm(){
   }
   updateSumIndicators();
   checkInvExamCounts();
+  updateHRPSumIndicator();
 }
 
 function editEntry(id){
@@ -952,6 +980,7 @@ function editEntry(id){
   document.getElementById('entryValidationErrors').innerHTML = '';
   updateSumIndicators();
   checkInvExamCounts();
+  updateHRPSumIndicator();
 }
 
 async function deleteEntry(id){
@@ -1026,7 +1055,7 @@ function renderRecords(){
   const canDelete = ['admin'].includes(currentUser.role);
 
   tbody.innerHTML = rows.map(e=>{
-    const hrpTotal = Object.values(e.hrp||{}).reduce((s,h)=>s+(h.identified||0),0);
+    const hrpTotal = e.visitedANC_hrp || 0; // "कुल HRP" = वही संख्या जो Visited ANC के HRP फ़ील्ड में दर्ज है
     let actions = `<button class="btn secondary" style="padding:5px 9px;font-size:12px;" onclick="editEntry('${e.id}')">View/Edit</button>`;
     if(canDelete) actions += `<button class="btn danger" style="padding:5px 9px;font-size:12px;" onclick="deleteEntry('${e.id}')">Delete</button>`;
     return `<tr>
@@ -1071,12 +1100,21 @@ function renderDashboard(){
 
   // KPIs
   const sum = (arr, key) => arr.reduce((s,e)=>s+(e[key]||0),0);
-  const totalHRP = rows.reduce((s,e)=> s + Object.values(e.hrp||{}).reduce((a,h)=>a+(h.identified||0),0), 0);
+  // "कुल HRP केस" = वही संख्या जो Visited ANC के अंतर्गत HRP फ़ील्ड में दर्ज है
+  const totalHRP = sum(rows, 'visitedANC_hrp');
+  // कुल प्रबंधित/Treated cases = सभी HRP श्रेणियों के outcome fields का योग (Normal Hb व Moderate Anemia को छोड़कर नहीं — outcome में सभी शामिल)
+  let totalManaged = 0;
+  rows.forEach(e=>{
+    Object.values(e.hrp||{}).forEach(h=>{
+      Object.values(h.outcomes||{}).forEach(v=>{ totalManaged += (v||0); });
+    });
+  });
   const kpis = [
     {lbl:'कुल एंट्री (Entries)', num: rows.length},
     {lbl:'Targeted ANC', num: sum(rows,'targetedANC')},
     {lbl:'Visited ANC', num: sum(rows,'visitedANC')},
-    {lbl:'कुल HRP केस', num: totalHRP}
+    {lbl:'कुल HRP केस (Visited ANC अनुसार)', num: totalHRP},
+    {lbl:'कुल Treated/Managed केस (सभी outcome)', num: totalManaged}
   ];
   document.getElementById('kpiRow').innerHTML = kpis.map(k=>`<div class="kpi"><div class="num">${k.num}</div><div class="lbl">${k.lbl}</div></div>`).join('');
 
@@ -1116,17 +1154,24 @@ function renderDashboard(){
     {label:'Done', data: INVESTIGATIONS.map(n=>invDone[n]), color:'#2E7D5B'}
   ]);
 
-  // HRP wise
-  const hrpCounts = {};
-  HRP_CATEGORIES.forEach(h=> hrpCounts[h.label]=0 );
+  // HRP wise (Identified vs Managed/Treated) — Normal Hb and Moderate Anemia
+  // are excluded from this "HRP" breakdown per programme definition, but
+  // remain fully recorded in the entry form and Excel export.
+  const countable = hrpCountableCategories();
+  const hrpCounts = {}, hrpManaged = {};
+  countable.forEach(h=>{ hrpCounts[h.label]=0; hrpManaged[h.label]=0; });
   rows.forEach(e=>{
-    HRP_CATEGORIES.forEach(h=>{
+    countable.forEach(h=>{
       const d = (e.hrp||{})[h.key];
-      if(d) hrpCounts[h.label]+=(d.identified||0);
+      if(d){
+        hrpCounts[h.label] += (d.identified||0);
+        hrpManaged[h.label] += Object.values(d.outcomes||{}).reduce((s,v)=>s+(v||0),0);
+      }
     });
   });
   renderBarChart('chartHRP', Object.keys(hrpCounts), [
-    {label:'पहचाने गए केस (Identified)', data: Object.values(hrpCounts), color:'#7A2E2E'}
+    {label:'पहचाने गए (Identified)', data: Object.values(hrpCounts), color:'#7A2E2E'},
+    {label:'प्रबंधित / Treated (Outcome)', data: Object.values(hrpManaged), color:'#2E7D5B'}
   ], true);
 }
 
