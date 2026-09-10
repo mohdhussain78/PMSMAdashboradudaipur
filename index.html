@@ -217,6 +217,26 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
         <div class="footRow"><button class="btn" onclick="registerCase()">केस दर्ज करें / Register</button></div>
         <div class="err" id="r_err"></div>
       </div>
+
+      <div class="panel">
+        <h3>Excel के माध्यम से एक साथ कई HRP केस दर्ज करें / Bulk Upload HRP Cases</h3>
+        <div class="small" style="margin-bottom:8px;">
+          Excel में पहली पंक्ति में ये कॉलम हेडर बिल्कुल इसी नाम से रखें:<br>
+          <b>PCTSID, Name, HusbandName, Age, GravidaParity, Village, Block, Subcenter, Facility, ASHAName, ASHAPhone, ANMName, LMP, EDD, RiskLevel, RiskCategories, Notes, NextDueDate</b><br>
+          · <b>PCTSID</b> ठीक 15 अंकों का होना चाहिए — जो PCTS ID पहले से दर्ज है वह पंक्ति स्वतः छोड़ दी जाएगी (डुप्लीकेट नहीं बनेगा)।<br>
+          · <b>RiskLevel</b> में red / yellow / green लिखें (खाली छोड़ने पर yellow माना जाएगा)।<br>
+          · <b>RiskCategories</b> में एक से अधिक श्रेणी को अर्धविराम ( ; ) से अलग कर लिखें (सूची ऊपर "जोखिम श्रेणियाँ" में देखें)।<br>
+          · तिथियाँ (LMP, EDD, NextDueDate) <code>yyyy-mm-dd</code> या <code>dd/mm/yyyy</code> प्रारूप में लिखें।<br>
+          · अपलोड के बाद सभी केस तुरंत (real-time) डैशबोर्ड व HRP सूची में — हर उपयोगकर्ता को उसकी भूमिका/अधिकार के अनुसार — दिखने लगेंगे, और कोई भी अधिकृत उपयोगकर्ता उनमें फ़ॉलो-अप सेवा प्रविष्टि जोड़ सकेगा।
+          <div id="bulkCaseScopeNote" style="margin-top:4px;color:var(--maroon-dark);font-weight:600;"></div>
+        </div>
+        <button class="btn small ghost" onclick="downloadCaseTemplate()">📥 Excel टेम्पलेट डाउनलोड करें</button>
+        <div style="margin-top:10px;">
+          <input type="file" id="bulkCaseFile" accept=".xlsx,.xls,.csv">
+          <button class="btn small" onclick="bulkUploadCases()">Upload व केस दर्ज करें</button>
+        </div>
+        <div id="bulkCaseProgress" class="small" style="margin-top:10px;white-space:pre-line;"></div>
+      </div>
     </section>
 
     <!-- MY PASSWORD -->
@@ -422,6 +442,12 @@ function enterApp(){
   if(['facility','block'].includes(currentUser.role)){ document.getElementById('r_block').value = currentUser.blockName; }
 
   toggleUserScopeFields();
+  const scopeNoteEl = document.getElementById('bulkCaseScopeNote');
+  if(scopeNoteEl){
+    scopeNoteEl.textContent = ['asha','anm','facility','block'].includes(currentUser.role)
+      ? 'ध्यान दें: आपकी भूमिका के अनुसार गाँव/उप-केंद्र/सुविधा/ब्लॉक फ़ील्ड स्वतः आपके क्षेत्र पर सेट होंगे, भले ही Excel फ़ाइल में कुछ और लिखा हो।'
+      : '';
+  }
   listenCases();
   if(currentUser.role==='admin') listenUsers();
   const frBtn = document.getElementById('fullReportBtn');
@@ -583,6 +609,95 @@ async function registerCase(){
     alert('HRP केस सफलतापूर्वक दर्ज किया गया।');
     switchTab('list');
   }catch(e){ errEl.textContent = 'त्रुटि: '+e.message; }
+}
+
+/* ================= BULK UPLOAD: HRP CASES (Excel) ================= */
+function toISODateStr(v){
+  if(v===undefined || v===null || v==='') return '';
+  if(v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10);
+  const s = String(v).trim();
+  if(!s) return '';
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if(m){ const [,d,mo,y]=m; return `${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`; }
+  return s;
+}
+function downloadCaseTemplate(){
+  const headers = ['PCTSID','Name','HusbandName','Age','GravidaParity','Village','Block','Subcenter','Facility','ASHAName','ASHAPhone','ANMName','LMP','EDD','RiskLevel','RiskCategories','Notes','NextDueDate'];
+  const sample = ['123456789012345','उदाहरण नाम','पति का नाम',24,'G2P1','गाँव का नाम','Girwa','उप-केंद्र नाम','PHC/CHC नाम','आशा नाम','9999999999','एएनएम नाम','2026-01-15','2026-10-20','yellow','गंभीर रक्ताल्पता (Hb<7) Severe Anemia; PIH / Pre-eclampsia / Eclampsia','टिप्पणी यहाँ लिखें','2026-09-20'];
+  const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'HRP Cases');
+  XLSX.writeFile(wb, 'HRP_Case_Bulk_Upload_Template.xlsx');
+}
+async function bulkUploadCases(){
+  const fileInput = document.getElementById('bulkCaseFile');
+  const progEl = document.getElementById('bulkCaseProgress');
+  if(!fileInput.files.length){ progEl.textContent = 'कृपया पहले एक Excel/CSV फ़ाइल चुनें।'; return; }
+  progEl.textContent = 'फ़ाइल पढ़ी जा रही है...';
+  const file = fileInput.files[0];
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, {type:'array', cellDates:true});
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+  if(!rows.length){ progEl.textContent = 'फ़ाइल में कोई डेटा नहीं मिला।'; return; }
+
+  let done=0, skipped=0, failed=[];
+  for(let i=0;i<rows.length;i++){
+    const row = rows[i];
+    const rowNum = i+2; // 1 = header row
+    const pctsId = String(row.PCTSID||row.PctsId||row.pctsid||row['PCTS ID']||'').trim();
+    const name = String(row.Name||row.name||'').trim();
+    if(!/^\d{15}$/.test(pctsId)){ failed.push(`पंक्ति ${rowNum} (${name||'—'}) — PCTS ID 15 अंकों का नहीं है`); continue; }
+    if(!name){ failed.push(`पंक्ति ${rowNum} — नाम खाली है`); continue; }
+
+    let village = String(row.Village||row.village||'').trim();
+    let block = String(row.Block||row.block||'').trim();
+    let subcenter = String(row.Subcenter||row.subcenter||'').trim();
+    let facility = String(row.Facility||row.facility||'').trim();
+    // भूमिका-आधारित क्षेत्र लॉक — मैन्युअल पंजीकरण फ़ॉर्म की तरह
+    if(currentUser.role==='asha') village = currentUser.village;
+    if(currentUser.role==='anm') subcenter = currentUser.subcenter;
+    if(['anm','facility'].includes(currentUser.role)) facility = currentUser.facilityName;
+    if(['facility','block'].includes(currentUser.role)) block = currentUser.blockName;
+    if(!village || !block || !subcenter || !facility){ failed.push(`पंक्ति ${rowNum} (${name}) — गाँव/ब्लॉक/उप-केंद्र/सुविधा में से कोई खाली है`); continue; }
+
+    progEl.textContent = `जाँच व दर्ज हो रहा है: ${name} (${i+1}/${rows.length})...`;
+    try{
+      const dupSnap = await db.collection('hrp_cases').where('pctsId','==', pctsId).limit(1).get();
+      if(!dupSnap.empty){ skipped++; continue; }
+      const riskLevelRaw = String(row.RiskLevel||row.risklevel||'yellow').trim().toLowerCase();
+      const riskLevel = ['red','yellow','green'].includes(riskLevelRaw) ? riskLevelRaw : 'yellow';
+      const catsRaw = String(row.RiskCategories||row.riskcategories||'').split(';').map(s=>s.trim()).filter(Boolean);
+      const riskCategories = catsRaw.filter(c=>RISK_CATEGORIES.includes(c));
+      const doc = {
+        pctsId, name,
+        husbandName: String(row.HusbandName||row.husbandname||'').trim(),
+        age: Number(row.Age||row.age)||0,
+        gravidaParity: String(row.GravidaParity||row.gravidaparity||'').trim(),
+        village, block, subcenter, facility,
+        ashaName: String(row.ASHAName||row.ashaname||'').trim(),
+        ashaPhone: String(row.ASHAPhone||row.ashaphone||'').trim(),
+        anmName: String(row.ANMName||row.anmname||'').trim(),
+        lmp: toISODateStr(row.LMP||row.lmp),
+        edd: toISODateStr(row.EDD||row.edd),
+        riskCategories, notes: String(row.Notes||row.notes||'').trim(),
+        riskLevel,
+        nextDueDate: toISODateStr(row.NextDueDate||row.nextduedate),
+        status:'active', district:'Udaipur',
+        registeredBy: currentUser.id, registeredByName: currentUser.name, registeredByRole: currentUser.role,
+        registeredDate: new Date().toISOString().slice(0,10),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      await db.collection('hrp_cases').add(doc);
+      done++;
+    }catch(e){
+      failed.push(`पंक्ति ${rowNum} (${name}) — ${e.message}`);
+    }
+  }
+  progEl.textContent = `पूर्ण: ${done} केस दर्ज हुए, ${skipped} पहले से मौजूद (छोड़ दिए), ${failed.length} असफल।` +
+    (failed.length ? '\n\nअसफल:\n'+failed.join('\n') : '');
+  fileInput.value = '';
 }
 
 /* ================= CASE DETAIL / TIMELINE ================= */
