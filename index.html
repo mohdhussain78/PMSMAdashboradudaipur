@@ -11,6 +11,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <style>
 :root{
@@ -178,7 +179,8 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
           <option value="ltfu">संपर्क में नहीं (LTFU)</option>
           <option value="closed">बंद</option>
         </select>
-        <button class="btn small" onclick="exportCSV()">Excel निर्यात</button>
+        <button class="btn small" onclick="exportCSV()">Excel निर्यात (केस सूची)</button>
+        <button class="btn small ghost" id="fullReportBtn" onclick="exportFullReportCSV()" style="display:none;">पूर्ण रिपोर्ट (विज़िट सहित)</button>
       </div>
       <div class="caselist" id="caseList"></div>
     </section>
@@ -217,6 +219,19 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
       </div>
     </section>
 
+    <!-- MY PASSWORD -->
+    <section id="tab-mypass" class="hidden">
+      <div class="panel" style="max-width:420px;">
+        <h3>मेरा पासवर्ड बदलें / Change My Password</h3>
+        <div class="field"><label>वर्तमान पासवर्ड</label><input id="pw_current" type="password"></div>
+        <div class="field"><label>नया पासवर्ड (कम से कम 6 अक्षर)</label><input id="pw_new" type="password"></div>
+        <div class="field"><label>नया पासवर्ड दोबारा लिखें</label><input id="pw_new2" type="password"></div>
+        <button class="btn" onclick="changeMyPassword()">पासवर्ड बदलें</button>
+        <div class="err" id="pw_err"></div>
+        <div class="small" id="pw_ok" style="color:var(--green);margin-top:6px;"></div>
+      </div>
+    </section>
+
     <!-- USERS (admin only) -->
     <section id="tab-users" class="hidden">
       <div class="panel">
@@ -239,9 +254,24 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
           <div class="field" id="nu_subcenter_wrap"><label>उप-केंद्र (ANM के लिए)</label><input id="nu_subcenter"></div>
           <div class="field" id="nu_facility_wrap"><label>स्वास्थ्य सुविधा</label><input id="nu_facility"></div>
           <div class="field" id="nu_block_wrap"><label>ब्लॉक</label><select id="nu_block"></select></div>
+          <div class="field">
+            <label><input type="checkbox" id="nu_editrights" style="width:auto;vertical-align:middle;"> केस विवरण संपादित करने का अधिकार (Edit Rights)</label>
+            <div class="small">सामान्यतः केवल नई फ़ॉलो-अप प्रविष्टि जोड़ी जा सकती है। यह चुनने पर यह उपयोगकर्ता किसी भी केस का मूल विवरण (नाम, आयु आदि) बदल सकेगा।</div>
+          </div>
         </div>
         <button class="btn" onclick="addUser()">उपयोगकर्ता जोड़ें</button>
         <div class="err" id="nu_err"></div>
+      </div>
+      <div class="panel">
+        <h3>Excel से एक साथ कई उपयोगकर्ता जोड़ें / Bulk Upload</h3>
+        <div class="small" style="margin-bottom:8px;">
+          Excel में ये कॉलम हेडर बिल्कुल इसी नाम से रखें: <b>Username, Name, Role, Village, Subcenter, Facility, Block, EditRights</b><br>
+          Role में लिखें: asha / anm / facility / block / district / admin — EditRights में हाँ/yes/1 लिखने पर वह अधिकार मिलेगा (खाली छोड़ सकते हैं)।<br>
+          सभी का लॉगिन ईमेल अपने-आप <code>username@hrp.udr</code> बनेगा और डिफ़ॉल्ट पासवर्ड <code>admin@123</code> रहेगा — उपयोगकर्ता को बता दें कि पहली बार लॉगिन कर वे इसे "मेरा पासवर्ड" टैब से बदल लें।
+        </div>
+        <input type="file" id="bulkFile" accept=".xlsx,.xls,.csv">
+        <button class="btn small" onclick="bulkUploadUsers()">Upload व खाते बनाएं</button>
+        <div id="bulkProgress" class="small" style="margin-top:10px;white-space:pre-line;"></div>
       </div>
       <div class="panel">
         <h3>उपयोगकर्ता सूची</h3>
@@ -273,7 +303,16 @@ const auth = firebase.auth();
 // उपयोगकर्ता बनाते समय एडमिन की अपनी लॉगिन सेशन न बदले, इसके लिए एक दूसरा (secondary) Firebase app
 const secondaryApp = firebase.initializeApp(firebaseConfig, 'Secondary');
 const secondaryAuth = secondaryApp.auth();
-const AUTH_DOMAIN_SUFFIX = '@hrp-udaipur.local'; // Username को Firebase Auth ईमेल जैसा बनाने के लिए
+const AUTH_DOMAIN_SUFFIX = '@hrp.udr'; // Username को Firebase Auth ईमेल जैसा बनाने के लिए
+const DEFAULT_PASSWORD = 'admin@123';
+function sanitizeUsername(u){
+  return (u||'').toString().trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+}
+function usernameToEmail(u){
+  const clean = sanitizeUsername(u);
+  if(!/^[a-z0-9._-]{3,30}$/.test(clean)) return null;
+  return clean + AUTH_DOMAIN_SUFFIX;
+}
 
 const BLOCKS = ["Girwa","Badgaon","Mavli","Vallabhnagar","Girwa Urban","Salumber","Sarada","Jhadol","Kherwada","Kotra","Gogunda","Rishabdev","Lasadiya","Bhinder","Kanod"];
 
@@ -314,7 +353,7 @@ async function ensureDefaultAdmin(){
     if(e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential' || e.code === 'auth/invalid-login-credentials'){
       const cred = await secondaryAuth.createUserWithEmailAndPassword('admin'+AUTH_DOMAIN_SUFFIX, 'admin123');
       await db.collection('hrp_users').doc(cred.user.uid).set({
-        username:'admin', name:'Administrator', role:'admin', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        username:'admin', name:'Administrator', role:'admin', canEditEntries:true, createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       await secondaryAuth.signOut();
     }
@@ -328,8 +367,10 @@ async function doLogin(){
   const errEl = document.getElementById('li_err');
   errEl.textContent = '';
   if(!u || !p){ errEl.textContent='Username और Password दर्ज करें।'; return; }
+  const email = usernameToEmail(u);
+  if(!email){ errEl.textContent='Username केवल अक्षर, अंक, . _ - इस्तेमाल कर सकता है।'; return; }
   try{
-    await auth.signInWithEmailAndPassword(u.toLowerCase()+AUTH_DOMAIN_SUFFIX, p);
+    await auth.signInWithEmailAndPassword(email, p);
     // onAuthStateChanged नीचे प्रोफ़ाइल लोड कर enterApp() बुलाएगा
   }catch(e){ errEl.textContent = 'गलत Username या Password।'; }
 }
@@ -347,7 +388,7 @@ auth.onAuthStateChanged(async (user)=>{
   const snap = await db.collection('hrp_users').doc(user.uid).get();
   if(!snap.exists){ auth.signOut(); return; }
   const d = snap.data();
-  currentUser = {id:user.uid, username:d.username||'', name:d.name||d.username||'', role:d.role, village:d.village||'', subcenter:d.subcenter||'', facilityName:d.facilityName||'', blockName:d.blockName||''};
+  currentUser = {id:user.uid, username:d.username||'', name:d.name||d.username||'', role:d.role, village:d.village||'', subcenter:d.subcenter||'', facilityName:d.facilityName||'', blockName:d.blockName||'', canEditEntries: d.canEditEntries===true || d.role==='admin'};
   enterApp();
 });
 
@@ -355,6 +396,7 @@ auth.onAuthStateChanged(async (user)=>{
 function tabsForRole(role){
   const base = [['dashboard','डैशबोर्ड'],['list','HRP सूची']];
   if(['asha','anm','facility','block','district','admin'].includes(role)) base.push(['register','नया पंजीकरण']);
+  base.push(['mypass','मेरा पासवर्ड']);
   if(role==='admin') base.push(['users','उपयोगकर्ता']);
   return base;
 }
@@ -382,10 +424,12 @@ function enterApp(){
   toggleUserScopeFields();
   listenCases();
   if(currentUser.role==='admin') listenUsers();
+  const frBtn = document.getElementById('fullReportBtn');
+  if(frBtn) frBtn.style.display = currentUser.role==='admin' ? 'inline-block' : 'none';
 }
 function switchTab(name){
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
-  ['dashboard','list','register','users'].forEach(t=>{
+  ['dashboard','list','register','mypass','users'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('hidden', t!==name);
   });
   if(name==='dashboard') renderDashboard();
@@ -562,13 +606,17 @@ async function openCase(id, silentRefresh){
         <div class="small" style="font-family:'Roboto Mono',monospace;">PCTS ID: ${esc(c.pctsId||'—')}</div>
         <div class="small">पति: ${esc(c.husbandName||'-')} · ${esc(c.gravidaParity||'')}</div>
       </div>
-      <button onclick="closeModal()">✕</button>
+      <div>
+        ${currentUser.canEditEntries?`<button class="btn small ghost" style="margin-inline-end:6px;" onclick="toggleEditCase()">✎ संपादित करें</button>`:''}
+        <button onclick="closeModal()">✕</button>
+      </div>
     </div>
     <div class="badges" style="margin-top:8px;">
       ${ {red:'<span class="badge red">उच्च जोखिम</span>',yellow:'<span class="badge amber">मध्यम जोखिम</span>',green:'<span class="badge green">निम्न जोखिम</span>'}[c.riskLevel]||'' }
       ${ {active:'<span class="badge green">सक्रिय</span>',delivered:'<span class="badge blue">प्रसव हो चुका</span>',referred:'<span class="badge blue">रेफर</span>',ltfu:'<span class="badge gray">संपर्क में नहीं</span>',closed:'<span class="badge gray">बंद</span>'}[c.status]||'' }
     </div>
 
+    <div id="viewDetailsBlock">
     <div class="section-title">विवरण / Details</div>
     <div class="grid2 small">
       <div>गाँव: ${esc(c.village||'-')}</div><div>ब्लॉक: ${esc(c.block||'-')}</div>
@@ -580,6 +628,32 @@ async function openCase(id, silentRefresh){
     <div class="section-title">जोखिम श्रेणियाँ</div>
     <div>${riskChipsHTML}</div>
     ${c.notes?`<div class="small" style="margin-top:6px;">टिप्पणी: ${esc(c.notes)}</div>`:''}
+    </div>
+
+    <div id="editDetailsBlock" class="hidden">
+      <div class="section-title">मूल विवरण संपादित करें / Edit Details</div>
+      <div class="grid2">
+        <div class="field"><label>PCTS ID</label><input id="e_pcts" maxlength="15" value="${esc(c.pctsId||'')}"></div>
+        <div class="field"><label>महिला का नाम</label><input id="e_name" value="${esc(c.name||'')}"></div>
+        <div class="field"><label>पति का नाम</label><input id="e_husband" value="${esc(c.husbandName||'')}"></div>
+        <div class="field"><label>आयु</label><input id="e_age" type="number" value="${c.age||''}"></div>
+        <div class="field"><label>Gravida/Parity</label><input id="e_gp" value="${esc(c.gravidaParity||'')}"></div>
+        <div class="field"><label>गाँव</label><input id="e_village" value="${esc(c.village||'')}"></div>
+        <div class="field"><label>उप-केंद्र</label><input id="e_subcenter" value="${esc(c.subcenter||'')}"></div>
+        <div class="field"><label>सुविधा</label><input id="e_facility" value="${esc(c.facility||'')}"></div>
+        <div class="field"><label>ASHA नाम</label><input id="e_asha" value="${esc(c.ashaName||'')}"></div>
+        <div class="field"><label>ASHA मोबाइल</label><input id="e_ashaphone" value="${esc(c.ashaPhone||'')}"></div>
+        <div class="field"><label>ANM नाम</label><input id="e_anm" value="${esc(c.anmName||'')}"></div>
+        <div class="field"><label>LMP</label><input id="e_lmp" type="date" value="${c.lmp||''}"></div>
+        <div class="field"><label>EDD</label><input id="e_edd" type="date" value="${c.edd||''}"></div>
+      </div>
+      <div class="field"><label>टिप्पणी / Notes</label><textarea id="e_notes">${esc(c.notes||'')}</textarea></div>
+      <div class="footRow">
+        <button class="btn ghost" onclick="toggleEditCase()">रद्द करें</button>
+        <button class="btn" onclick="saveCaseEdit('${id}')">सहेजें</button>
+      </div>
+      <div class="err" id="e_err"></div>
+    </div>
 
     <div class="section-title">स्थिति अपडेट करें / Update Status</div>
     <div class="grid2">
@@ -633,6 +707,36 @@ async function openCase(id, silentRefresh){
   `;
 }
 function closeModal(){ activeCaseId=null; document.getElementById('caseModalOverlay').classList.add('hidden'); }
+function toggleEditCase(){
+  document.getElementById('viewDetailsBlock').classList.toggle('hidden');
+  document.getElementById('editDetailsBlock').classList.toggle('hidden');
+}
+async function saveCaseEdit(id){
+  const errEl = document.getElementById('e_err'); errEl.textContent='';
+  const pctsId = document.getElementById('e_pcts').value.trim();
+  if(!/^\d{15}$/.test(pctsId)){ errEl.textContent='PCTS ID ठीक 15 अंकों की संख्या होनी चाहिए।'; return; }
+  const dupSnap = await db.collection('hrp_cases').where('pctsId','==', pctsId).get();
+  if(dupSnap.docs.some(d=>d.id!==id)){ errEl.textContent='यह PCTS ID किसी और केस में पहले से मौजूद है।'; return; }
+  const payload = {
+    pctsId, name: document.getElementById('e_name').value.trim(),
+    husbandName: document.getElementById('e_husband').value.trim(),
+    age: Number(document.getElementById('e_age').value)||0,
+    gravidaParity: document.getElementById('e_gp').value.trim(),
+    village: document.getElementById('e_village').value.trim(),
+    subcenter: document.getElementById('e_subcenter').value.trim(),
+    facility: document.getElementById('e_facility').value.trim(),
+    ashaName: document.getElementById('e_asha').value.trim(),
+    ashaPhone: document.getElementById('e_ashaphone').value.trim(),
+    anmName: document.getElementById('e_anm').value.trim(),
+    lmp: document.getElementById('e_lmp').value, edd: document.getElementById('e_edd').value,
+    notes: document.getElementById('e_notes').value.trim(),
+    lastEditedBy: currentUser.name, lastEditedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    await db.collection('hrp_cases').doc(id).update(payload);
+    openCase(id);
+  }catch(e){ errEl.textContent = 'त्रुटि: '+e.message; }
+}
 
 async function updateCaseStatus(id){
   const level = document.getElementById('m_level').value;
@@ -658,21 +762,47 @@ async function addVisit(caseId){
   openCase(caseId);
 }
 
+/* ================= MY PASSWORD ================= */
+async function changeMyPassword(){
+  const errEl = document.getElementById('pw_err'), okEl = document.getElementById('pw_ok');
+  errEl.textContent=''; okEl.textContent='';
+  const cur = document.getElementById('pw_current').value;
+  const n1 = document.getElementById('pw_new').value;
+  const n2 = document.getElementById('pw_new2').value;
+  if(!cur || !n1 || !n2){ errEl.textContent='सभी फ़ील्ड भरें।'; return; }
+  if(n1.length < 6){ errEl.textContent='नया पासवर्ड कम से कम 6 अक्षर/अंक का होना चाहिए।'; return; }
+  if(n1 !== n2){ errEl.textContent='दोनों नए पासवर्ड मेल नहीं खाते।'; return; }
+  const email = usernameToEmail(currentUser.username);
+  try{
+    const cred = firebase.auth.EmailAuthProvider.credential(email, cur);
+    await auth.currentUser.reauthenticateWithCredential(cred);
+    await auth.currentUser.updatePassword(n1);
+    okEl.textContent = 'पासवर्ड सफलतापूर्वक बदल दिया गया।';
+    document.getElementById('pw_current').value=''; document.getElementById('pw_new').value=''; document.getElementById('pw_new2').value='';
+  }catch(e){
+    errEl.textContent = e.code==='auth/wrong-password' ? 'वर्तमान पासवर्ड गलत है।' : ('त्रुटि: '+e.message);
+  }
+}
+
 /* ================= USERS (admin) ================= */
 async function addUser(){
   const errEl = document.getElementById('nu_err'); errEl.textContent='';
-  const uid = document.getElementById('nu_user').value.trim().toLowerCase();
+  const uidRaw = document.getElementById('nu_user').value.trim();
   const pass = document.getElementById('nu_pass').value;
   const name = document.getElementById('nu_name').value.trim();
   const role = document.getElementById('nu_role').value;
-  if(!uid || !pass || !name){ errEl.textContent='सभी फ़ील्ड भरें।'; return; }
+  const editRights = document.getElementById('nu_editrights').checked;
+  if(!uidRaw || !pass || !name){ errEl.textContent='सभी फ़ील्ड भरें।'; return; }
+  const email = usernameToEmail(uidRaw);
+  if(!email){ errEl.textContent='Username केवल अंग्रेज़ी अक्षर, अंक, . _ - इस्तेमाल कर सकता है (कम से कम 3 अक्षर)।'; return; }
   if(pass.length < 6){ errEl.textContent='Password कम से कम 6 अक्षर/अंक का होना चाहिए (Firebase की सीमा)।'; return; }
+  const uid = sanitizeUsername(uidRaw);
   const existing = await db.collection('hrp_users').where('username','==',uid).limit(1).get();
   if(!existing.empty){ errEl.textContent='यह Username पहले से मौजूद है।'; return; }
   try{
-    const cred = await secondaryAuth.createUserWithEmailAndPassword(uid+AUTH_DOMAIN_SUFFIX, pass);
+    const cred = await secondaryAuth.createUserWithEmailAndPassword(email, pass);
     await db.collection('hrp_users').doc(cred.user.uid).set({
-      username:uid, name, role,
+      username:uid, name, role, canEditEntries: editRights,
       village: document.getElementById('nu_village').value.trim(),
       subcenter: document.getElementById('nu_subcenter').value.trim(),
       facilityName: document.getElementById('nu_facility').value.trim(),
@@ -685,15 +815,65 @@ async function addUser(){
     return;
   }
   ['nu_user','nu_pass','nu_name','nu_village','nu_subcenter','nu_facility'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('nu_editrights').checked = false;
+}
+
+/* ================= BULK USER UPLOAD ================= */
+async function bulkUploadUsers(){
+  const fileInput = document.getElementById('bulkFile');
+  const progEl = document.getElementById('bulkProgress');
+  if(!fileInput.files.length){ progEl.textContent = 'कृपया पहले एक Excel/CSV फ़ाइल चुनें।'; return; }
+  progEl.textContent = 'फ़ाइल पढ़ी जा रही है...';
+  const file = fileInput.files[0];
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, {type:'array'});
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+  if(!rows.length){ progEl.textContent = 'फ़ाइल में कोई डेटा नहीं मिला।'; return; }
+
+  let done=0, skipped=0, failed=[];
+  for(const row of rows){
+    const uidRaw = String(row.Username||row.username||'').trim();
+    const name = String(row.Name||row.name||'').trim();
+    const role = String(row.Role||row.role||'').trim().toLowerCase();
+    if(!uidRaw || !name || !role){ failed.push(`${uidRaw||'(खाली)'} — Username/Name/Role में से कोई खाली है`); continue; }
+    const email = usernameToEmail(uidRaw);
+    if(!email){ failed.push(`${uidRaw} — अमान्य Username`); continue; }
+    const uid = sanitizeUsername(uidRaw);
+    progEl.textContent = `बना रहा है: ${uid} (${done+skipped+failed.length+1}/${rows.length})...`;
+    try{
+      const existing = await db.collection('hrp_users').where('username','==',uid).limit(1).get();
+      if(!existing.empty){ skipped++; continue; }
+      const editRightsRaw = String(row.EditRights||row.editrights||'').trim().toLowerCase();
+      const editRights = ['yes','y','1','हाँ','ha','true'].includes(editRightsRaw);
+      const cred = await secondaryAuth.createUserWithEmailAndPassword(email, DEFAULT_PASSWORD);
+      await db.collection('hrp_users').doc(cred.user.uid).set({
+        username:uid, name, role, canEditEntries: editRights,
+        village: String(row.Village||row.village||'').trim(),
+        subcenter: String(row.Subcenter||row.subcenter||'').trim(),
+        facilityName: String(row.Facility||row.facility||'').trim(),
+        blockName: String(row.Block||row.block||'').trim(),
+        createdBy: currentUser.id, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      await secondaryAuth.signOut();
+      done++;
+    }catch(e){
+      failed.push(`${uid} — ${e.code==='auth/email-already-in-use'?'Username पहले से मौजूद':e.message}`);
+    }
+  }
+  progEl.textContent = `पूर्ण: ${done} खाते बने, ${skipped} पहले से मौजूद (छोड़ दिए), ${failed.length} असफल।` +
+    (failed.length ? '\n\nअसफल:\n'+failed.join('\n') : '');
+  fileInput.value = '';
 }
 function renderUserTable(){
   const roleLabels = {asha:'ASHA',anm:'ANM',facility:'Facility MO I/C',block:'Block',district:'District',admin:'Administrator'};
   const rows = allUsers.map(u=>`<tr>
     <td>${esc(u.username||'')}</td><td>${esc(u.name)}</td><td>${roleLabels[u.role]||u.role}</td>
     <td>${esc(u.village||u.subcenter||u.facilityName||u.blockName||'-')}</td>
+    <td>${u.canEditEntries?'✓':'—'}</td>
     <td>${u.id!==currentUser.id?`<button class="btn small ghost" onclick="deleteUser('${u.id}')">हटाएं</button>`:'(आप)'}</td>
   </tr>`).join('');
-  document.getElementById('userTable').innerHTML = `<thead><tr><th>Username</th><th>नाम</th><th>भूमिका</th><th>क्षेत्र</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+  document.getElementById('userTable').innerHTML = `<thead><tr><th>Username</th><th>नाम</th><th>भूमिका</th><th>क्षेत्र</th><th>Edit Rights</th><th></th></tr></thead><tbody>${rows}</tbody>`;
 }
 async function deleteUser(uid){
   if(!confirm('क्या आप वाकई इस उपयोगकर्ता को हटाना चाहते हैं? ध्यान दें: इससे उनका प्रोफ़ाइल हट जाएगा, लेकिन उनका लॉगिन खाता Firebase Console से अलग से हटाना होगा (Authentication टैब में)।')) return;
@@ -713,6 +893,34 @@ function exportCSV(){
 }
 
 function esc(s){ return (s??'').toString().replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+async function exportFullReportCSV(){
+  const headers = ['PCTS ID','Name','Village','Block','RiskLevel','Status','VisitDate','Platform','BP','Hb','Findings','Action','Ambulance','EnteredBy','EnteredRole'];
+  const allRows = [];
+  const visitsSnap = await db.collection('hrp_visits').get();
+  const visitsByCase = {};
+  visitsSnap.docs.forEach(d=>{
+    const v = d.data();
+    if(!visitsByCase[v.caseId]) visitsByCase[v.caseId] = [];
+    visitsByCase[v.caseId].push(v);
+  });
+  allCases.forEach(c=>{
+    const visits = visitsByCase[c.id]||[];
+    if(!visits.length){
+      allRows.push([c.pctsId,c.name,c.village,c.block,c.riskLevel,c.status,'','','','','','','','','']);
+    }else{
+      visits.forEach(v=>{
+        allRows.push([c.pctsId,c.name,c.village,c.block,c.riskLevel,c.status,v.date,v.platform,v.bp,v.hb,v.findings,v.action,v.ambulance,v.enteredByName,v.enteredByRole]);
+      });
+    }
+  });
+  const csv = [headers.join(',')].concat(allRows.map(r=>r.map(v=>`"${(v??'').toString().replace(/"/g,'""')}"`).join(','))).join('\n');
+  const blob = new Blob(["\ufeff"+csv], {type:'text/csv;charset=utf-8;'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'HRP_Full_Report_'+new Date().toISOString().slice(0,10)+'.csv';
+  link.click();
+}
 </script>
 </body>
 </html>
