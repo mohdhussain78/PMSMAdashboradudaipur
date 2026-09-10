@@ -10,6 +10,7 @@
 <!-- Firebase (compat SDK) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 
 <style>
 :root{
@@ -162,7 +163,7 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
     <!-- MY LIST -->
     <section id="tab-list" class="hidden">
       <div class="filterbar">
-        <input class="grow" id="f_search" placeholder="नाम / गाँव से खोजें..." oninput="renderCaseList()">
+        <input class="grow" id="f_search" placeholder="नाम / गाँव / PCTS ID से खोजें..." oninput="renderCaseList()">
         <select id="f_risk" onchange="renderCaseList()">
           <option value="">सभी जोखिम स्तर</option>
           <option value="red">उच्च जोखिम (Red)</option>
@@ -187,6 +188,7 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
       <div class="panel">
         <h3>नया HRP केस पंजीकरण / Register New HRP Case</h3>
         <div class="grid2">
+          <div class="field"><label>PCTS ID (15 अंक) *</label><input id="r_pcts" maxlength="15" inputmode="numeric" placeholder="15 अंकों की RCH/PCTS ID"></div>
           <div class="field"><label>महिला का नाम *</label><input id="r_name"></div>
           <div class="field"><label>पति का नाम</label><input id="r_husband"></div>
           <div class="field"><label>आयु *</label><input id="r_age" type="number"></div>
@@ -267,6 +269,11 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+const auth = firebase.auth();
+// उपयोगकर्ता बनाते समय एडमिन की अपनी लॉगिन सेशन न बदले, इसके लिए एक दूसरा (secondary) Firebase app
+const secondaryApp = firebase.initializeApp(firebaseConfig, 'Secondary');
+const secondaryAuth = secondaryApp.auth();
+const AUTH_DOMAIN_SUFFIX = '@hrp-udaipur.local'; // Username को Firebase Auth ईमेल जैसा बनाने के लिए
 
 const BLOCKS = ["Girwa","Badgaon","Mavli","Vallabhnagar","Girwa Urban","Salumber","Sarada","Jhadol","Kherwada","Kotra","Gogunda","Rishabdev","Lasadiya","Bhinder","Kanod"];
 
@@ -299,11 +306,18 @@ function fillBlockSelects(){
 fillBlockSelects();
 
 async function ensureDefaultAdmin(){
-  const snap = await db.collection('hrp_users').doc('admin').get();
-  if(!snap.exists){
-    await db.collection('hrp_users').doc('admin').set({
-      password:'admin123', name:'Administrator', role:'admin', createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+  // यदि admin उपयोगकर्ता अभी तक Firebase Auth में नहीं बना है, तो पहली बार में बना दें
+  try{
+    await secondaryAuth.signInWithEmailAndPassword('admin'+AUTH_DOMAIN_SUFFIX, 'admin123');
+    await secondaryAuth.signOut();
+  }catch(e){
+    if(e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential' || e.code === 'auth/invalid-login-credentials'){
+      const cred = await secondaryAuth.createUserWithEmailAndPassword('admin'+AUTH_DOMAIN_SUFFIX, 'admin123');
+      await db.collection('hrp_users').doc(cred.user.uid).set({
+        username:'admin', name:'Administrator', role:'admin', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      await secondaryAuth.signOut();
+    }
   }
 }
 ensureDefaultAdmin();
@@ -315,25 +329,27 @@ async function doLogin(){
   errEl.textContent = '';
   if(!u || !p){ errEl.textContent='Username और Password दर्ज करें।'; return; }
   try{
-    const doc = await db.collection('hrp_users').doc(u).get();
-    if(!doc.exists || doc.data().password !== p){ errEl.textContent='गलत Username या Password।'; return; }
-    const d = doc.data();
-    currentUser = {id:u, name:d.name||u, role:d.role, village:d.village||'', subcenter:d.subcenter||'', facilityName:d.facilityName||'', blockName:d.blockName||''};
-    sessionStorage.setItem('hrp_user', JSON.stringify(currentUser));
-    enterApp();
-  }catch(e){ errEl.textContent = 'लॉगिन त्रुटि: '+e.message; }
+    await auth.signInWithEmailAndPassword(u.toLowerCase()+AUTH_DOMAIN_SUFFIX, p);
+    // onAuthStateChanged नीचे प्रोफ़ाइल लोड कर enterApp() बुलाएगा
+  }catch(e){ errEl.textContent = 'गलत Username या Password।'; }
 }
 function doLogout(){
-  sessionStorage.removeItem('hrp_user');
   if(unsubCases) unsubCases(); if(unsubUsers) unsubUsers();
-  currentUser=null;
-  document.getElementById('app').classList.add('hidden');
-  document.getElementById('loginScreen').classList.remove('hidden');
+  auth.signOut();
 }
-(function tryAutoLogin(){
-  const saved = sessionStorage.getItem('hrp_user');
-  if(saved){ currentUser = JSON.parse(saved); enterApp(); }
-})();
+auth.onAuthStateChanged(async (user)=>{
+  if(!user){
+    currentUser = null;
+    document.getElementById('app').classList.add('hidden');
+    document.getElementById('loginScreen').classList.remove('hidden');
+    return;
+  }
+  const snap = await db.collection('hrp_users').doc(user.uid).get();
+  if(!snap.exists){ auth.signOut(); return; }
+  const d = snap.data();
+  currentUser = {id:user.uid, username:d.username||'', name:d.name||d.username||'', role:d.role, village:d.village||'', subcenter:d.subcenter||'', facilityName:d.facilityName||'', blockName:d.blockName||''};
+  enterApp();
+});
 
 /* ================= APP SHELL ================= */
 function tabsForRole(role){
@@ -450,6 +466,7 @@ function caseCardHTML(c){
   const riskBadge = {red:'<span class="badge red">उच्च जोखिम</span>', yellow:'<span class="badge amber">मध्यम जोखिम</span>', green:'<span class="badge green">निम्न जोखिम</span>'}[c.riskLevel]||'';
   return `<div class="casecard risk-${c.riskLevel}" onclick="openCase('${c.id}')">
     <div class="nm">${esc(c.name)} <span class="small">(${c.age||'-'})</span></div>
+    <div class="small" style="font-family:'Roboto Mono',monospace;color:#8a7a7a;">PCTS: ${esc(c.pctsId||'—')}</div>
     <div class="meta">${esc(c.village||'')} · ${esc(c.block||'')} · ${esc(c.facility||'')}</div>
     <div class="meta">EDD: ${c.edd||'—'} · अगली देय: ${c.nextDueDate||'—'}</div>
     <div class="badges">${riskBadge}${statusBadge}</div>
@@ -463,7 +480,7 @@ function renderCaseList(){
     if(riskF && c.riskLevel!==riskF) return false;
     if(statusF && c.status!==statusF) return false;
     if(!statusF && !riskF && document.getElementById('f_status') && document.getElementById('f_status').value==='active' && c.status!=='active') return false;
-    if(search && !((c.name||'').toLowerCase().includes(search) || (c.village||'').toLowerCase().includes(search))) return false;
+    if(search && !((c.name||'').toLowerCase().includes(search) || (c.village||'').toLowerCase().includes(search) || (c.pctsId||'').includes(search))) return false;
     return true;
   });
   list.sort((a,b)=>{
@@ -477,18 +494,29 @@ function renderCaseList(){
 /* ================= REGISTER ================= */
 async function registerCase(){
   const errEl = document.getElementById('r_err'); errEl.textContent='';
+  const pctsId = document.getElementById('r_pcts').value.trim();
   const name = document.getElementById('r_name').value.trim();
   const age = document.getElementById('r_age').value;
   const village = document.getElementById('r_village').value.trim();
   const block = document.getElementById('r_block').value;
   const subcenter = document.getElementById('r_subcenter').value.trim();
   const facility = document.getElementById('r_facility').value.trim();
+  if(!/^\d{15}$/.test(pctsId)){
+    errEl.textContent = 'PCTS ID ठीक 15 अंकों की संख्या होनी चाहिए।'; return;
+  }
   if(!name || !age || !village || !block || !subcenter || !facility){
     errEl.textContent = 'कृपया * चिह्नित सभी फ़ील्ड भरें।'; return;
   }
+  // डुप्लीकेट जाँच — इसी PCTS ID से पहले से कोई केस दर्ज तो नहीं
+  const dupSnap = await db.collection('hrp_cases').where('pctsId','==', pctsId).limit(1).get();
+  if(!dupSnap.empty){
+    const existing = dupSnap.docs[0].data();
+    errEl.textContent = `यह PCTS ID पहले से दर्ज है — ${existing.name||''} (${existing.village||''}, ${existing.block||''}) के नाम पर। कृपया जाँच लें।`;
+    return;
+  }
   const cats = Array.from(document.querySelectorAll('#riskChips .chip.on')).map(c=>c.dataset.cat);
   const doc = {
-    name, husbandName: document.getElementById('r_husband').value.trim(),
+    pctsId, name, husbandName: document.getElementById('r_husband').value.trim(),
     age: Number(age), gravidaParity: document.getElementById('r_gp').value.trim(),
     village, block, subcenter, facility,
     ashaName: document.getElementById('r_asha').value.trim(),
@@ -531,6 +559,7 @@ async function openCase(id, silentRefresh){
     <div class="closeRow">
       <div>
         <h2>${esc(c.name)} <span class="small">(${c.age||'-'} वर्ष)</span></h2>
+        <div class="small" style="font-family:'Roboto Mono',monospace;">PCTS ID: ${esc(c.pctsId||'—')}</div>
         <div class="small">पति: ${esc(c.husbandName||'-')} · ${esc(c.gravidaParity||'')}</div>
       </div>
       <button onclick="closeModal()">✕</button>
@@ -632,41 +661,49 @@ async function addVisit(caseId){
 /* ================= USERS (admin) ================= */
 async function addUser(){
   const errEl = document.getElementById('nu_err'); errEl.textContent='';
-  const uid = document.getElementById('nu_user').value.trim();
+  const uid = document.getElementById('nu_user').value.trim().toLowerCase();
   const pass = document.getElementById('nu_pass').value;
   const name = document.getElementById('nu_name').value.trim();
   const role = document.getElementById('nu_role').value;
   if(!uid || !pass || !name){ errEl.textContent='सभी फ़ील्ड भरें।'; return; }
-  const existing = await db.collection('hrp_users').doc(uid).get();
-  if(existing.exists){ errEl.textContent='यह Username पहले से मौजूद है।'; return; }
-  await db.collection('hrp_users').doc(uid).set({
-    password:pass, name, role,
-    village: document.getElementById('nu_village').value.trim(),
-    subcenter: document.getElementById('nu_subcenter').value.trim(),
-    facilityName: document.getElementById('nu_facility').value.trim(),
-    blockName: document.getElementById('nu_block').value,
-    createdBy: currentUser.id, createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  });
+  if(pass.length < 6){ errEl.textContent='Password कम से कम 6 अक्षर/अंक का होना चाहिए (Firebase की सीमा)।'; return; }
+  const existing = await db.collection('hrp_users').where('username','==',uid).limit(1).get();
+  if(!existing.empty){ errEl.textContent='यह Username पहले से मौजूद है।'; return; }
+  try{
+    const cred = await secondaryAuth.createUserWithEmailAndPassword(uid+AUTH_DOMAIN_SUFFIX, pass);
+    await db.collection('hrp_users').doc(cred.user.uid).set({
+      username:uid, name, role,
+      village: document.getElementById('nu_village').value.trim(),
+      subcenter: document.getElementById('nu_subcenter').value.trim(),
+      facilityName: document.getElementById('nu_facility').value.trim(),
+      blockName: document.getElementById('nu_block').value,
+      createdBy: currentUser.id, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    await secondaryAuth.signOut();
+  }catch(e){
+    errEl.textContent = e.code==='auth/email-already-in-use' ? 'यह Username पहले से मौजूद है।' : ('त्रुटि: '+e.message);
+    return;
+  }
   ['nu_user','nu_pass','nu_name','nu_village','nu_subcenter','nu_facility'].forEach(id=>document.getElementById(id).value='');
 }
 function renderUserTable(){
   const roleLabels = {asha:'ASHA',anm:'ANM',facility:'Facility MO I/C',block:'Block',district:'District',admin:'Administrator'};
   const rows = allUsers.map(u=>`<tr>
-    <td>${esc(u.id)}</td><td>${esc(u.name)}</td><td>${roleLabels[u.role]||u.role}</td>
+    <td>${esc(u.username||'')}</td><td>${esc(u.name)}</td><td>${roleLabels[u.role]||u.role}</td>
     <td>${esc(u.village||u.subcenter||u.facilityName||u.blockName||'-')}</td>
     <td>${u.id!==currentUser.id?`<button class="btn small ghost" onclick="deleteUser('${u.id}')">हटाएं</button>`:'(आप)'}</td>
   </tr>`).join('');
   document.getElementById('userTable').innerHTML = `<thead><tr><th>Username</th><th>नाम</th><th>भूमिका</th><th>क्षेत्र</th><th></th></tr></thead><tbody>${rows}</tbody>`;
 }
 async function deleteUser(uid){
-  if(!confirm('क्या आप वाकई इस उपयोगकर्ता को हटाना चाहते हैं?')) return;
+  if(!confirm('क्या आप वाकई इस उपयोगकर्ता को हटाना चाहते हैं? ध्यान दें: इससे उनका प्रोफ़ाइल हट जाएगा, लेकिन उनका लॉगिन खाता Firebase Console से अलग से हटाना होगा (Authentication टैब में)।')) return;
   await db.collection('hrp_users').doc(uid).delete();
 }
 
 /* ================= EXPORT ================= */
 function exportCSV(){
-  const headers = ['Name','Age','Village','Block','Subcentre','Facility','ASHA','ANM','LMP','EDD','RiskLevel','RiskCategories','Status','LastContact','NextDue','RegisteredBy','RegisteredDate'];
-  const rows = allCases.map(c=>[c.name,c.age,c.village,c.block,c.subcenter,c.facility,c.ashaName,c.anmName,c.lmp,c.edd,c.riskLevel,(c.riskCategories||[]).join('; '),c.status,c.lastContactDate,c.nextDueDate,c.registeredByName,c.registeredDate]);
+  const headers = ['PCTS ID','Name','Age','Village','Block','Subcentre','Facility','ASHA','ANM','LMP','EDD','RiskLevel','RiskCategories','Status','LastContact','NextDue','RegisteredBy','RegisteredDate'];
+  const rows = allCases.map(c=>[c.pctsId,c.name,c.age,c.village,c.block,c.subcenter,c.facility,c.ashaName,c.anmName,c.lmp,c.edd,c.riskLevel,(c.riskCategories||[]).join('; '),c.status,c.lastContactDate,c.nextDueDate,c.registeredByName,c.registeredDate]);
   const csv = [headers.join(',')].concat(rows.map(r=>r.map(v=>`"${(v??'').toString().replace(/"/g,'""')}"`).join(','))).join('\n');
   const blob = new Blob(["\ufeff"+csv], {type:'text/csv;charset=utf-8;'});
   const link = document.createElement('a');
