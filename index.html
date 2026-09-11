@@ -174,7 +174,7 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
         <select id="f_status" onchange="renderCaseList()">
           <option value="active">सक्रिय (Active)</option>
           <option value="">सभी</option>
-          <option value="delivered">प्रसव हो चुका</option>
+          <option value="delivered">प्रसव / प्रसव हो चुका</option>
           <option value="referred">रेफर किया गया</option>
           <option value="ltfu">संपर्क में नहीं (LTFU)</option>
           <option value="closed">बंद</option>
@@ -305,6 +305,7 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
           सभी का लॉगिन ईमेल अपने-आप <code>username@hrp.udr</code> बनेगा और डिफ़ॉल्ट पासवर्ड <code>admin@123</code> रहेगा — उपयोगकर्ता को बता दें कि पहली बार लॉगिन कर वे इसे "मेरा पासवर्ड" टैब से बदल लें।
         </div>
         <input type="file" id="bulkFile" accept=".xlsx,.xls,.csv">
+        <button class="btn small ghost" onclick="downloadUserTemplate()">📥 Excel टेम्पलेट डाउनलोड करें</button>
         <button class="btn small" onclick="bulkUploadUsers()">Upload व खाते बनाएं</button>
         <div id="bulkProgress" class="small" style="margin-top:10px;white-space:pre-line;"></div>
       </div>
@@ -371,6 +372,12 @@ const COUNSEL_TOPICS = [
   "पोषण / आहार संबंधी परामर्श","खतरे के संकेत (Danger Signs) की जानकारी दी"
 ];
 const HRP_STATUS_INDICATORS = ["सामान्य / ठीक","निगरानी आवश्यक","चिंताजनक / खतरे के संकेत मौजूद","आपातकालीन स्थिति"];
+
+const DELIVERY_PLACE_OPTIONS = ["घर पर","सरकारी चिकित्सा संस्थान पर","प्राइवेट चिकित्सा संस्थान पर","ट्रांजिट में"];
+const DELIVERY_OUTCOME_OPTIONS = ["जीवित (Alive)","मृत जन्म (Still Birth)"];
+const HBNC_DAYS = [0,3,7,14,21,28,42];
+const HBNC_MOTHER_STATUS_OPTIONS = ["सामान्य","असामान्य","रेफर करने योग्य","मातृ मृत्यु"];
+const HBNC_BABY_STATUS_OPTIONS = ["सामान्य","असामान्य","रेफर करने योग्य","शिशु मृत्यु"];
 
 // सभी HRP जोखिम श्रेणियों में सामान्यतः दी जाने वाली संभावित सेवाएं — किसी भी संस्थान/भूमिका द्वारा प्रविष्टि हेतु
 const SERVICE_OPTIONS = [
@@ -566,7 +573,7 @@ function renderDashboard(){
     <div class="statcard red"><div class="num">${red.length}</div><div class="lbl">उच्च जोखिम (Red)</div></div>
     <div class="statcard amber"><div class="num">${overdue.length}</div><div class="lbl">अनुवर्ती लंबित</div></div>
     <div class="statcard blue"><div class="num">${referred.length}</div><div class="lbl">रेफर किए गए</div></div>
-    <div class="statcard green"><div class="num">${delivered.length}</div><div class="lbl">प्रसव हो चुका</div></div>
+    <div class="statcard green"><div class="num">${delivered.length}</div><div class="lbl">प्रसव / प्रसव हो चुका</div></div>
   `;
   const list = overdue.sort((a,b)=> new Date(a.nextDueDate) - new Date(b.nextDueDate));
   document.getElementById('overdueList').innerHTML = list.length ? list.map(caseCardHTML).join('') :
@@ -578,7 +585,7 @@ function caseCardHTML(c){
   const overdue = isOverdue(c), dueSoon = isDueSoon(c);
   const statusBadge = {
     active: overdue ? `<span class="badge red">अनुवर्ती लंबित</span>` : dueSoon ? `<span class="badge amber">शीघ्र देय</span>` : `<span class="badge green">सामान्य</span>`,
-    delivered: `<span class="badge blue">प्रसव हो चुका</span>`,
+    delivered: `<span class="badge blue">प्रसव / प्रसव हो चुका</span>`,
     referred: `<span class="badge blue">रेफर किया गया</span>`,
     ltfu: `<span class="badge gray">संपर्क में नहीं</span>`,
     closed: `<span class="badge gray">बंद</span>`
@@ -838,7 +845,7 @@ async function openCase(id, silentRefresh){
     </div>
     <div class="badges" style="margin-top:8px;">
       ${ {red:'<span class="badge red">उच्च जोखिम</span>',yellow:'<span class="badge amber">मध्यम जोखिम</span>',green:'<span class="badge green">निम्न जोखिम</span>'}[c.riskLevel]||'' }
-      ${ {active:'<span class="badge green">सक्रिय</span>',delivered:'<span class="badge blue">प्रसव हो चुका</span>',referred:'<span class="badge blue">रेफर</span>',ltfu:'<span class="badge gray">संपर्क में नहीं</span>',closed:'<span class="badge gray">बंद</span>'}[c.status]||'' }
+      ${ {active:'<span class="badge green">सक्रिय</span>',delivered:'<span class="badge blue">प्रसव / प्रसव हो चुका</span>',referred:'<span class="badge blue">रेफर</span>',ltfu:'<span class="badge gray">संपर्क में नहीं</span>',closed:'<span class="badge gray">बंद</span>'}[c.status]||'' }
     </div>
 
     <div id="viewDetailsBlock">
@@ -892,7 +899,7 @@ async function openCase(id, silentRefresh){
       <div class="field"><label>केस स्थिति</label>
         <select id="m_status">
           <option value="active" ${c.status==='active'?'selected':''}>सक्रिय</option>
-          <option value="delivered" ${c.status==='delivered'?'selected':''}>प्रसव हो चुका</option>
+          <option value="delivered" ${c.status==='delivered'?'selected':''}>प्रसव / प्रसव हो चुका</option>
           <option value="referred" ${c.status==='referred'?'selected':''}>रेफर किया गया</option>
           <option value="ltfu" ${c.status==='ltfu'?'selected':''}>संपर्क में नहीं (LTFU)</option>
           <option value="closed" ${c.status==='closed'?'selected':''}>बंद</option>
@@ -900,6 +907,53 @@ async function openCase(id, silentRefresh){
       </div>
     </div>
     <button class="btn small ghost" onclick="updateCaseStatus('${id}')">स्थिति सहेजें</button>
+
+    <div class="section-title">प्रसव विवरण / Delivery Details</div>
+    <div class="grid2">
+      <div class="field"><label>प्रसव का स्थान</label>
+        <select id="d_place" onchange="document.getElementById('d_facility_wrap').style.display = (this.value==='सरकारी चिकित्सा संस्थान पर'||this.value==='प्राइवेट चिकित्सा संस्थान पर') ? '' : 'none';">
+          <option value="">-- चयन करें --</option>
+          ${DELIVERY_PLACE_OPTIONS.map(p=>`<option value="${esc(p)}" ${c.deliveryPlace===p?'selected':''}>${esc(p)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field" id="d_facility_wrap" style="display:${(c.deliveryPlace==='सरकारी चिकित्सा संस्थान पर'||c.deliveryPlace==='प्राइवेट चिकित्सा संस्थान पर')?'':'none'};">
+        <label>संस्थान का नाम (यदि चिकित्सा संस्थान पर)</label>
+        <input id="d_facility" value="${esc(c.deliveryFacilityName||'')}" placeholder="संस्थान का नाम लिखें">
+      </div>
+      <div class="field"><label>प्रसव की दिनांक</label><input id="d_date" type="date" value="${c.deliveryDate||''}"></div>
+      <div class="field"><label>प्रसव का आउटकम</label>
+        <select id="d_outcome">
+          <option value="">-- चयन करें --</option>
+          ${DELIVERY_OUTCOME_OPTIONS.map(o=>`<option value="${esc(o)}" ${c.deliveryOutcome===o?'selected':''}>${esc(o)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <button class="btn small ghost" onclick="saveDeliveryDetails('${id}')">प्रसव विवरण सहेजें</button>
+
+    <div class="section-title">HBNC भ्रमण विवरण / Home Based Newborn Care (0, 3, 7, 14, 21, 28 व 42 वें दिन)</div>
+    <div class="tablewrap">
+      <table class="linelist" id="hbncTable">
+        <thead><tr><th>दिन</th><th>भ्रमण दिनांक</th><th>माँ की स्थिति</th><th>बच्चे की स्थिति</th></tr></thead>
+        <tbody>
+          ${HBNC_DAYS.map(day=>{
+            const hv = (c.hbncVisits||[]).find(x=>x.day===day) || {};
+            return `<tr>
+              <td>दिन ${day}</td>
+              <td><input type="date" id="hbnc_date_${day}" value="${hv.date||''}"></td>
+              <td><select id="hbnc_mother_${day}">
+                <option value="">--</option>
+                ${HBNC_MOTHER_STATUS_OPTIONS.map(s=>`<option value="${esc(s)}" ${hv.motherStatus===s?'selected':''}>${esc(s)}</option>`).join('')}
+              </select></td>
+              <td><select id="hbnc_baby_${day}">
+                <option value="">--</option>
+                ${HBNC_BABY_STATUS_OPTIONS.map(s=>`<option value="${esc(s)}" ${hv.babyStatus===s?'selected':''}>${esc(s)}</option>`).join('')}
+              </select></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <button class="btn small ghost" style="margin-top:8px;" onclick="saveHBNCVisits('${id}')">HBNC विवरण सहेजें</button>
 
     <div class="section-title">नई अनुवर्ती प्रविष्टि जोड़ें / Add Follow-up Entry</div>
     <div class="grid2">
@@ -1011,7 +1065,47 @@ async function saveCaseEdit(id){
 async function updateCaseStatus(id){
   const level = document.getElementById('m_level').value;
   const status = document.getElementById('m_status').value;
-  await db.collection('hrp_cases').doc(id).update({riskLevel:level, status:status});
+  try{
+    await db.collection('hrp_cases').doc(id).update({riskLevel:level, status:status});
+    openCase(id);
+  }catch(e){
+    console.error('updateCaseStatus error:', e);
+    alert('स्थिति सहेजने में त्रुटि हुई:\n' + e.message);
+  }
+}
+async function saveDeliveryDetails(id){
+  const place = document.getElementById('d_place').value;
+  const isFacilityDelivery = (place==='सरकारी चिकित्सा संस्थान पर' || place==='प्राइवेट चिकित्सा संस्थान पर');
+  const facility = document.getElementById('d_facility').value.trim();
+  const date = document.getElementById('d_date').value;
+  const outcome = document.getElementById('d_outcome').value;
+  try{
+    await db.collection('hrp_cases').doc(id).update({
+      deliveryPlace: place,
+      deliveryFacilityName: isFacilityDelivery ? facility : '',
+      deliveryDate: date,
+      deliveryOutcome: outcome
+    });
+    openCase(id);
+  }catch(e){
+    console.error('saveDeliveryDetails error:', e);
+    alert('प्रसव विवरण सहेजने में त्रुटि हुई:\n' + e.message);
+  }
+}
+async function saveHBNCVisits(id){
+  const hbncVisits = HBNC_DAYS.map(day=>({
+    day,
+    date: document.getElementById('hbnc_date_'+day).value,
+    motherStatus: document.getElementById('hbnc_mother_'+day).value,
+    babyStatus: document.getElementById('hbnc_baby_'+day).value
+  }));
+  try{
+    await db.collection('hrp_cases').doc(id).update({ hbncVisits });
+    openCase(id);
+  }catch(e){
+    console.error('saveHBNCVisits error:', e);
+    alert('HBNC विवरण सहेजने में त्रुटि हुई:\n' + e.message);
+  }
 }
 async function addVisit(caseId){
   const date = document.getElementById('v_date').value;
@@ -1111,6 +1205,16 @@ async function addUser(){
 }
 
 /* ================= BULK USER UPLOAD ================= */
+function downloadUserTemplate(){
+  const headers = ['Username','Name','Role','Village','Subcenter','Facility','Block','EditRights'];
+  const sample1 = ['ashadevi1','आशा देवी','asha','गाँव का नाम','','','',''];
+  const sample2 = ['anmsunita1','सुनीता कुमारी','anm','','उप-केंद्र नाम','सुविधा नाम','','नहीं'];
+  const sample3 = ['facilityuser1','फैसिलिटी प्रभारी','facility','','','सुविधा (PHC/CHC) नाम','','हाँ'];
+  const ws = XLSX.utils.aoa_to_sheet([headers, sample1, sample2, sample3]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Users');
+  XLSX.writeFile(wb, 'User_Bulk_Upload_Template.xlsx');
+}
 async function bulkUploadUsers(){
   const fileInput = document.getElementById('bulkFile');
   const progEl = document.getElementById('bulkProgress');
