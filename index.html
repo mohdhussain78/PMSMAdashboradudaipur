@@ -185,6 +185,21 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
       <div class="caselist" id="caseList"></div>
     </section>
 
+    <!-- SERVICE ENTRY AT ANY FACILITY (district-wide search) -->
+    <section id="tab-anyservice" class="hidden">
+      <div class="panel">
+        <h3>HRP सेवा एंट्री — किसी भी स्वास्थ्य संस्थान पर / Service Entry at Any Facility</h3>
+        <div class="small" style="margin-bottom:10px;">
+          यदि कोई HRP महिला अपने पंजीकृत क्षेत्र (गाँव/उप-केंद्र/सुविधा) के अतिरिक्त ज़िले के किसी भी अन्य स्वास्थ्य संस्थान — उच्च सुविधा ANC, PMSMA, रेफरल, प्रसव आदि — पर सेवा लेने आती है, तो उसे यहाँ PCTS ID या नाम से खोजें। उसे अब तक — वर्तमान व पूर्व में — दी गई सभी सेवाओं, परामर्श व treatment का पूरा रिकॉर्ड दिखेगा, ताकि उसी आधार पर आगे इलाज तय हो सके, और आप यहीं से नई सेवा प्रविष्टि जोड़ सकते हैं।
+        </div>
+        <div class="filterbar">
+          <input class="grow" id="as_query" placeholder="PCTS ID (15 अंक) या महिला का नाम / गाँव लिखें..." onkeydown="if(event.key==='Enter')searchAnyCase()">
+          <button class="btn small" onclick="searchAnyCase()">🔍 खोजें</button>
+        </div>
+        <div class="caselist" id="as_results"></div>
+      </div>
+    </section>
+
     <!-- REGISTER -->
     <section id="tab-register" class="hidden">
       <div class="panel">
@@ -349,6 +364,14 @@ const PLATFORM_OPTIONS = [
   "उच्च सुविधा हेतु रेफरल भ्रमण","एम्बुलेंस 104 (प्रसव पूर्व कॉल)","एम्बुलेंस 108 (आपातकाल)","प्रसव / Delivery","PNC भ्रमण"
 ];
 
+// केवल ASHA द्वारा भ्रमण एंट्री हेतु — परामर्श विषय
+const COUNSEL_TOPICS = [
+  "उपचार व दवा संबंधी परामर्श","प्रसव हेतु सुविधा की जानकारी (कहाँ प्रसव कराना है)",
+  "MCHN दिवस पर जाने हेतु याद दिलाया","PMSMA दिवस पर जाने हेतु याद दिलाया",
+  "पोषण / आहार संबंधी परामर्श","खतरे के संकेत (Danger Signs) की जानकारी दी"
+];
+const HRP_STATUS_INDICATORS = ["सामान्य / ठीक","निगरानी आवश्यक","चिंताजनक / खतरे के संकेत मौजूद","आपातकालीन स्थिति"];
+
 let currentUser = null;
 let allCases = [];      // live cache
 let allVisits = {};     // caseId -> [visits]
@@ -415,6 +438,7 @@ auth.onAuthStateChanged(async (user)=>{
 /* ================= APP SHELL ================= */
 function tabsForRole(role){
   const base = [['dashboard','डैशबोर्ड'],['list','HRP सूची']];
+  if(['anm','facility','block','district','admin'].includes(role)) base.push(['anyservice','सेवा एंट्री (किसी भी संस्थान पर)']);
   if(['asha','anm','facility','block','district','admin'].includes(role)) base.push(['register','नया पंजीकरण']);
   base.push(['mypass','मेरा पासवर्ड']);
   if(role==='admin') base.push(['users','उपयोगकर्ता']);
@@ -455,11 +479,12 @@ function enterApp(){
 }
 function switchTab(name){
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
-  ['dashboard','list','register','mypass','users'].forEach(t=>{
+  ['dashboard','list','anyservice','register','mypass','users'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('hidden', t!==name);
   });
   if(name==='dashboard') renderDashboard();
   if(name==='list') renderCaseList();
+  if(name==='anyservice'){ document.getElementById('as_query').value=''; document.getElementById('as_results').innerHTML=''; }
 }
 function toggleUserScopeFields(){
   const role = document.getElementById('nu_role').value;
@@ -559,6 +584,33 @@ function renderCaseList(){
   });
   const el = document.getElementById('caseList');
   if(el) el.innerHTML = list.length ? list.map(caseCardHTML).join('') : `<div class="emptynote">कोई केस नहीं मिला।</div>`;
+}
+
+/* ================= SERVICE ENTRY AT ANY FACILITY (district-wide search) ================= */
+async function searchAnyCase(){
+  const raw = (document.getElementById('as_query').value||'').trim();
+  const resEl = document.getElementById('as_results');
+  if(!raw){ resEl.innerHTML = '<div class="emptynote">PCTS ID या नाम/गाँव लिखकर खोजें।</div>'; return; }
+  resEl.innerHTML = '<div class="emptynote">पूरे ज़िले के रिकॉर्ड में खोजा जा रहा है...</div>';
+  try{
+    let results = [];
+    if(/^\d{15}$/.test(raw)){
+      const snap = await db.collection('hrp_cases').where('pctsId','==', raw).limit(1).get();
+      results = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    }else{
+      const q = raw.toLowerCase();
+      // ज़िले के सभी केस में खोजें (यह टैब जानबूझकर scope-मुक्त है, ताकि किसी भी संस्थान पर सेवा दर्ज हो सके)
+      const snap = await db.collection('hrp_cases').get();
+      results = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>
+        (c.name||'').toLowerCase().includes(q) ||
+        (c.pctsId||'').includes(raw) ||
+        (c.village||'').toLowerCase().includes(q)
+      ).slice(0,40);
+    }
+    resEl.innerHTML = results.length ? results.map(caseCardHTML).join('') : '<div class="emptynote">कोई केस नहीं मिला। PCTS ID की जाँच करें या नाम की स्पेलिंग बदलकर देखें।</div>';
+  }catch(e){
+    resEl.innerHTML = `<div class="emptynote">खोज में त्रुटि: ${esc(e.message)}</div>`;
+  }
 }
 
 /* ================= REGISTER ================= */
@@ -703,8 +755,16 @@ async function bulkUploadCases(){
 /* ================= CASE DETAIL / TIMELINE ================= */
 async function openCase(id, silentRefresh){
   activeCaseId = id;
-  const c = allCases.find(x=>x.id===id);
-  if(!c) return;
+  let c = allCases.find(x=>x.id===id);
+  if(!c){
+    // यह केस उपयोगकर्ता के सामान्य scoped दायरे (गाँव/उप-केंद्र/सुविधा) से बाहर हो सकता है —
+    // जैसे "सेवा एंट्री (किसी भी संस्थान पर)" खोज से खोला गया केस — सीधे Firestore से लाएँ।
+    try{
+      const snap = await db.collection('hrp_cases').doc(id).get();
+      if(!snap.exists) return;
+      c = {id: snap.id, ...snap.data()};
+    }catch(e){ console.error(e); return; }
+  }
   const modal = document.getElementById('caseModalOverlay');
   const body = document.getElementById('caseModalBody');
   modal.classList.remove('hidden');
@@ -806,6 +866,29 @@ async function openCase(id, silentRefresh){
       </div>
       <div class="field"><label>अगली अनुवर्ती तिथि</label><input id="v_nextdue" type="date"></div>
     </div>
+
+    ${currentUser.role==='asha' ? `
+    <div class="section-title">आशा भ्रमण विवरण / ASHA Visit Details</div>
+    <div class="field"><label>परामर्श दिया गया (एक या अधिक चुनें) / Counseling Given</label></div>
+    <div class="chipset" id="v_counsel_chips">${COUNSEL_TOPICS.map(t=>`<span class="chip" data-c="${esc(t)}" onclick="this.classList.toggle('on')">${esc(t)}</span>`).join('')}</div>
+    <div class="grid2" style="margin-top:10px;">
+      <div class="field"><label>Mobilization / HRP को साथ ले जाया गया</label>
+        <select id="v_mobilization">
+          <option value="">नहीं</option>
+          <option>MCHN दिवस पर</option>
+          <option>PMSMA दिवस पर</option>
+          <option>सुविधा ANC हेतु</option>
+          <option>प्रसव हेतु सुविधा तक</option>
+        </select>
+      </div>
+      <div class="field"><label>रेफरल (यदि किया गया) / Referral</label><input id="v_referral" placeholder="जैसे: CHC सलूंबर — रक्तस्राव हेतु रेफर किया"></div>
+    </div>
+    <div class="field"><label>HRP की वर्तमान स्थिति संकेतक / Status Indicator</label>
+      <select id="v_hrpstatus">${HRP_STATUS_INDICATORS.map(s=>`<option>${esc(s)}</option>`).join('')}</select>
+    </div>
+    <div class="field"><label>HRP को अगली विज़िट के बारे में क्या बताया गया / Advice for Next Visit</label><textarea id="v_nextadvice" placeholder="जैसे: अगली PMSMA दिवस (15 तारीख) को सुविधा पर अवश्य जाएँ..."></textarea></div>
+    ` : ''}
+
     <div class="footRow"><button class="btn" onclick="addVisit('${id}')">प्रविष्टि जोड़ें</button></div>
 
     <div class="section-title">टाइमलाइन / History (${visits.length})</div>
@@ -816,6 +899,11 @@ async function openCase(id, silentRefresh){
           <div class="dt">${v.date}${v.ambulance?` · एम्बुलेंस ${v.ambulance}`:''}</div>
           <div class="txt">${v.bp?`BP: ${esc(v.bp)} `:''}${v.hb?`Hb: ${v.hb} `:''}${v.findings?`— ${esc(v.findings)}`:''}</div>
           ${v.action?`<div class="txt">कार्यवाही: ${esc(v.action)}</div>`:''}
+          ${v.counselingTopics&&v.counselingTopics.length?`<div class="txt">परामर्श: ${v.counselingTopics.map(esc).join(', ')}</div>`:''}
+          ${v.mobilization?`<div class="txt">Mobilization: ${esc(v.mobilization)}</div>`:''}
+          ${v.referral?`<div class="txt">रेफरल: ${esc(v.referral)}</div>`:''}
+          ${v.hrpStatusIndicator?`<div class="txt">स्थिति संकेतक: ${esc(v.hrpStatusIndicator)}</div>`:''}
+          ${v.nextVisitAdvice?`<div class="txt">अगली विज़िट हेतु सलाह: ${esc(v.nextVisitAdvice)}</div>`:''}
           <div class="by">दर्ज: ${esc(v.enteredByName||'')} (${v.enteredByRole||''})</div>
         </div>`).join('') : '<div class="small">अभी तक कोई प्रविष्टि नहीं।</div>'}
     </div>
@@ -869,6 +957,14 @@ async function addVisit(caseId){
     enteredBy: currentUser.id, enteredByName: currentUser.name, enteredByRole: currentUser.role,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   };
+  if(currentUser.role==='asha'){
+    const counselEl = document.getElementById('v_counsel_chips');
+    if(counselEl) doc.counselingTopics = Array.from(counselEl.querySelectorAll('.chip.on')).map(c=>c.dataset.c);
+    const mobEl = document.getElementById('v_mobilization'); if(mobEl) doc.mobilization = mobEl.value;
+    const refEl = document.getElementById('v_referral'); if(refEl) doc.referral = refEl.value.trim();
+    const statusEl = document.getElementById('v_hrpstatus'); if(statusEl) doc.hrpStatusIndicator = statusEl.value;
+    const advEl = document.getElementById('v_nextadvice'); if(advEl) doc.nextVisitAdvice = advEl.value.trim();
+  }
   await db.collection('hrp_visits').add(doc);
   const nextDue = document.getElementById('v_nextdue').value;
   const updatePayload = { lastContactDate: date };
