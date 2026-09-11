@@ -410,6 +410,7 @@ let activeCaseId = null;
 let unsubCases = null, unsubUsers = null;
 let unsubAnyService = null;
 let anyServiceCases = [];   // "सेवा एंट्री (किसी भी संस्थान पर)" टैब हेतु — पूरे ज़िले के सभी HRP केस, real-time
+let activeTab = 'dashboard'; // वर्तमान में सक्रिय टैब — केस विवरण मोडल में टैब-विशिष्ट व्यवहार तय करने हेतु
 
 /* ================= LOGIN ================= */
 function fillBlockSelects(){
@@ -510,6 +511,7 @@ function enterApp(){
   if(frBtn) frBtn.style.display = currentUser.role==='admin' ? 'inline-block' : 'none';
 }
 function switchTab(name){
+  activeTab = name;
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
   ['dashboard','list','anyservice','register','mypass','users'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('hidden', t!==name);
@@ -794,6 +796,58 @@ async function bulkUploadCases(){
   fileInput.value = '';
 }
 
+/* प्रसव विवरण / Delivery Details व HBNC भ्रमण विवरण — दोनों जगह (सामान्य केस सूची व "सेवा एंट्री" टैब) उपयोग होने वाला साझा ब्लॉक */
+function deliveryHBNCBlockHTML(c, id){
+  return `
+    <div class="section-title">प्रसव विवरण / Delivery Details</div>
+    <div class="grid2">
+      <div class="field"><label>प्रसव का स्थान</label>
+        <select id="d_place" onchange="document.getElementById('d_facility_wrap').style.display = (this.value==='सरकारी चिकित्सा संस्थान पर'||this.value==='प्राइवेट चिकित्सा संस्थान पर') ? '' : 'none';">
+          <option value="">-- चयन करें --</option>
+          ${DELIVERY_PLACE_OPTIONS.map(p=>`<option value="${esc(p)}" ${c.deliveryPlace===p?'selected':''}>${esc(p)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field" id="d_facility_wrap" style="display:${(c.deliveryPlace==='सरकारी चिकित्सा संस्थान पर'||c.deliveryPlace==='प्राइवेट चिकित्सा संस्थान पर')?'':'none'};">
+        <label>संस्थान का नाम (यदि चिकित्सा संस्थान पर)</label>
+        <input id="d_facility" value="${esc(c.deliveryFacilityName||'')}" placeholder="संस्थान का नाम लिखें">
+      </div>
+      <div class="field"><label>प्रसव की दिनांक</label><input id="d_date" type="date" value="${c.deliveryDate||''}"></div>
+      <div class="field"><label>प्रसव का आउटकम</label>
+        <select id="d_outcome">
+          <option value="">-- चयन करें --</option>
+          ${DELIVERY_OUTCOME_OPTIONS.map(o=>`<option value="${esc(o)}" ${c.deliveryOutcome===o?'selected':''}>${esc(o)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <button class="btn small ghost" onclick="saveDeliveryDetails('${id}')">प्रसव विवरण सहेजें</button>
+
+    <div class="section-title">HBNC भ्रमण विवरण / Home Based Newborn Care (0, 3, 7, 14, 21, 28 व 42 वें दिन)</div>
+    <div class="tablewrap">
+      <table class="linelist" id="hbncTable">
+        <thead><tr><th>दिन</th><th>भ्रमण दिनांक</th><th>माँ की स्थिति</th><th>बच्चे की स्थिति</th></tr></thead>
+        <tbody>
+          ${HBNC_DAYS.map(day=>{
+            const hv = (c.hbncVisits||[]).find(x=>x.day===day) || {};
+            return `<tr>
+              <td>दिन ${day}</td>
+              <td><input type="date" id="hbnc_date_${day}" value="${hv.date||''}"></td>
+              <td><select id="hbnc_mother_${day}">
+                <option value="">--</option>
+                ${HBNC_MOTHER_STATUS_OPTIONS.map(s=>`<option value="${esc(s)}" ${hv.motherStatus===s?'selected':''}>${esc(s)}</option>`).join('')}
+              </select></td>
+              <td><select id="hbnc_baby_${day}">
+                <option value="">--</option>
+                ${HBNC_BABY_STATUS_OPTIONS.map(s=>`<option value="${esc(s)}" ${hv.babyStatus===s?'selected':''}>${esc(s)}</option>`).join('')}
+              </select></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <button class="btn small ghost" style="margin-top:8px;" onclick="saveHBNCVisits('${id}')">HBNC विवरण सहेजें</button>
+  `;
+}
+
 /* ================= CASE DETAIL / TIMELINE ================= */
 async function openCase(id, silentRefresh){
   activeCaseId = id;
@@ -908,52 +962,7 @@ async function openCase(id, silentRefresh){
     </div>
     <button class="btn small ghost" onclick="updateCaseStatus('${id}')">स्थिति सहेजें</button>
 
-    <div class="section-title">प्रसव विवरण / Delivery Details</div>
-    <div class="grid2">
-      <div class="field"><label>प्रसव का स्थान</label>
-        <select id="d_place" onchange="document.getElementById('d_facility_wrap').style.display = (this.value==='सरकारी चिकित्सा संस्थान पर'||this.value==='प्राइवेट चिकित्सा संस्थान पर') ? '' : 'none';">
-          <option value="">-- चयन करें --</option>
-          ${DELIVERY_PLACE_OPTIONS.map(p=>`<option value="${esc(p)}" ${c.deliveryPlace===p?'selected':''}>${esc(p)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field" id="d_facility_wrap" style="display:${(c.deliveryPlace==='सरकारी चिकित्सा संस्थान पर'||c.deliveryPlace==='प्राइवेट चिकित्सा संस्थान पर')?'':'none'};">
-        <label>संस्थान का नाम (यदि चिकित्सा संस्थान पर)</label>
-        <input id="d_facility" value="${esc(c.deliveryFacilityName||'')}" placeholder="संस्थान का नाम लिखें">
-      </div>
-      <div class="field"><label>प्रसव की दिनांक</label><input id="d_date" type="date" value="${c.deliveryDate||''}"></div>
-      <div class="field"><label>प्रसव का आउटकम</label>
-        <select id="d_outcome">
-          <option value="">-- चयन करें --</option>
-          ${DELIVERY_OUTCOME_OPTIONS.map(o=>`<option value="${esc(o)}" ${c.deliveryOutcome===o?'selected':''}>${esc(o)}</option>`).join('')}
-        </select>
-      </div>
-    </div>
-    <button class="btn small ghost" onclick="saveDeliveryDetails('${id}')">प्रसव विवरण सहेजें</button>
-
-    <div class="section-title">HBNC भ्रमण विवरण / Home Based Newborn Care (0, 3, 7, 14, 21, 28 व 42 वें दिन)</div>
-    <div class="tablewrap">
-      <table class="linelist" id="hbncTable">
-        <thead><tr><th>दिन</th><th>भ्रमण दिनांक</th><th>माँ की स्थिति</th><th>बच्चे की स्थिति</th></tr></thead>
-        <tbody>
-          ${HBNC_DAYS.map(day=>{
-            const hv = (c.hbncVisits||[]).find(x=>x.day===day) || {};
-            return `<tr>
-              <td>दिन ${day}</td>
-              <td><input type="date" id="hbnc_date_${day}" value="${hv.date||''}"></td>
-              <td><select id="hbnc_mother_${day}">
-                <option value="">--</option>
-                ${HBNC_MOTHER_STATUS_OPTIONS.map(s=>`<option value="${esc(s)}" ${hv.motherStatus===s?'selected':''}>${esc(s)}</option>`).join('')}
-              </select></td>
-              <td><select id="hbnc_baby_${day}">
-                <option value="">--</option>
-                ${HBNC_BABY_STATUS_OPTIONS.map(s=>`<option value="${esc(s)}" ${hv.babyStatus===s?'selected':''}>${esc(s)}</option>`).join('')}
-              </select></td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>
-    <button class="btn small ghost" style="margin-top:8px;" onclick="saveHBNCVisits('${id}')">HBNC विवरण सहेजें</button>
+    ${activeTab==='anyservice' ? '' : deliveryHBNCBlockHTML(c, id)}
 
     <div class="section-title">नई अनुवर्ती प्रविष्टि जोड़ें / Add Follow-up Entry</div>
     <div class="grid2">
@@ -1009,6 +1018,8 @@ async function openCase(id, silentRefresh){
     ` : ''}
 
     <div class="footRow"><button class="btn" onclick="addVisit('${id}')">प्रविष्टि जोड़ें</button></div>
+
+    ${(activeTab==='anyservice' && c.status==='delivered') ? deliveryHBNCBlockHTML(c, id) : ''}
 
     <div class="section-title">टाइमलाइन / History (${visits.length})</div>
     <div class="timeline">
