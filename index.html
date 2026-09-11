@@ -372,6 +372,29 @@ const COUNSEL_TOPICS = [
 ];
 const HRP_STATUS_INDICATORS = ["सामान्य / ठीक","निगरानी आवश्यक","चिंताजनक / खतरे के संकेत मौजूद","आपातकालीन स्थिति"];
 
+// सभी HRP जोखिम श्रेणियों में सामान्यतः दी जाने वाली संभावित सेवाएं — किसी भी संस्थान/भूमिका द्वारा प्रविष्टि हेतु
+const SERVICE_OPTIONS = [
+  "आयरन-फोलिक एसिड (IFA) गोलियां वितरित",
+  "इंजेक्शन आयरन सुक्रोज / IV Iron दिया गया",
+  "रक्ताधान (Blood Transfusion) हेतु परामर्श/व्यवस्था",
+  "रक्तचाप जांच व उच्च रक्तचाप की दवा दी/समायोजित (PIH प्रबंधन)",
+  "मैग्नीशियम सल्फेट (गंभीर PE / Eclampsia प्रबंधन)",
+  "रक्त शर्करा (Blood Sugar) जांच",
+  "इंसुलिन / मधुमेह नियंत्रण दवा समायोजित (GDM प्रबंधन)",
+  "कैल्शियम व प्रोटीन सप्लीमेंट वितरित",
+  "TT / Td टीकाकरण",
+  "अल्ट्रासाउंड (USG) कराया गया",
+  "आवश्यक जांच कराई गई (Hb/Urine/HIV/Syphilis आदि)",
+  "पोषण / आहार परामर्श",
+  "संस्थागत प्रसव हेतु परामर्श",
+  "प्रसव सुविधा/स्थान की योजना पर चर्चा (Birth Preparedness)",
+  "उच्च सुविधा हेतु रेफर किया गया",
+  "एम्बुलेंस सेवा (104/108) की जानकारी/उपयोग",
+  "अगली ANC/MCHN/PMSMA दिवस हेतु सूचित किया",
+  "भर्ती किया गया (निगरानी/प्रबंधन हेतु Admission)",
+  "अन्य उपचार / Other Treatment"
+];
+
 let currentUser = null;
 let allCases = [];      // live cache
 let allVisits = {};     // caseId -> [visits]
@@ -858,8 +881,10 @@ async function openCase(id, silentRefresh){
       <div class="field"><label>BP</label><input id="v_bp" placeholder="जैसे 120/80"></div>
       <div class="field"><label>Hb (g/dl)</label><input id="v_hb" type="number" step="0.1"></div>
     </div>
-    <div class="field"><label>निष्कर्ष / Findings</label><textarea id="v_findings"></textarea></div>
-    <div class="field"><label>की गई कार्यवाही / Action Taken</label><textarea id="v_action"></textarea></div>
+    <div class="field"><label>इस विज़िट पर दी गई सेवाएं / Services Provided (एक या अधिक चुनें)</label></div>
+    <div class="chipset" id="v_services_chips">${SERVICE_OPTIONS.map(s=>`<span class="chip" data-c="${esc(s)}" onclick="this.classList.toggle('on')">${esc(s)}</span>`).join('')}</div>
+    <div class="field" style="margin-top:10px;"><label>निष्कर्ष / Findings</label><textarea id="v_findings"></textarea></div>
+    <div class="field"><label>की गई कार्यवाही / अन्य विवरण / Action Taken / Other Details</label><textarea id="v_action"></textarea></div>
     <div class="grid2">
       <div class="field"><label>एम्बुलेंस उपयोग</label>
         <select id="v_ambulance"><option value="">कोई नहीं</option><option value="104">104 (प्रसव पूर्व)</option><option value="108">108 (आपातकाल)</option></select>
@@ -897,14 +922,15 @@ async function openCase(id, silentRefresh){
         <div class="tlitem">
           <div class="plat">${esc(v.platform)}</div>
           <div class="dt">${v.date}${v.ambulance?` · एम्बुलेंस ${v.ambulance}`:''}</div>
+          ${v.servicesProvided&&v.servicesProvided.length?`<div class="txt"><b>दी गई सेवाएं:</b> ${v.servicesProvided.map(esc).join(', ')}</div>`:''}
           <div class="txt">${v.bp?`BP: ${esc(v.bp)} `:''}${v.hb?`Hb: ${v.hb} `:''}${v.findings?`— ${esc(v.findings)}`:''}</div>
-          ${v.action?`<div class="txt">कार्यवाही: ${esc(v.action)}</div>`:''}
+          ${v.action?`<div class="txt">कार्यवाही/अन्य विवरण: ${esc(v.action)}</div>`:''}
           ${v.counselingTopics&&v.counselingTopics.length?`<div class="txt">परामर्श: ${v.counselingTopics.map(esc).join(', ')}</div>`:''}
           ${v.mobilization?`<div class="txt">Mobilization: ${esc(v.mobilization)}</div>`:''}
           ${v.referral?`<div class="txt">रेफरल: ${esc(v.referral)}</div>`:''}
           ${v.hrpStatusIndicator?`<div class="txt">स्थिति संकेतक: ${esc(v.hrpStatusIndicator)}</div>`:''}
           ${v.nextVisitAdvice?`<div class="txt">अगली विज़िट हेतु सलाह: ${esc(v.nextVisitAdvice)}</div>`:''}
-          <div class="by">दर्ज: ${esc(v.enteredByName||'')} (${v.enteredByRole||''})</div>
+          <div class="by">दर्ज: ${esc(v.enteredByName||'')} (${v.enteredByRole||''})${v.enteredByFacility?` — ${esc(v.enteredByFacility)}`:''}</div>
         </div>`).join('') : '<div class="small">अभी तक कोई प्रविष्टि नहीं।</div>'}
     </div>
   `;
@@ -952,9 +978,11 @@ async function addVisit(caseId){
   const doc = {
     caseId, date, platform: document.getElementById('v_platform').value,
     bp: document.getElementById('v_bp').value.trim(), hb: document.getElementById('v_hb').value ? Number(document.getElementById('v_hb').value) : null,
+    servicesProvided: Array.from(document.getElementById('v_services_chips').querySelectorAll('.chip.on')).map(c=>c.dataset.c),
     findings: document.getElementById('v_findings').value.trim(), action: document.getElementById('v_action').value.trim(),
     ambulance: document.getElementById('v_ambulance').value,
     enteredBy: currentUser.id, enteredByName: currentUser.name, enteredByRole: currentUser.role,
+    enteredByFacility: currentUser.facilityName || currentUser.subcenter || currentUser.village || currentUser.blockName || '',
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   };
   if(currentUser.role==='asha'){
