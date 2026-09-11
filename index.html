@@ -790,22 +790,35 @@ async function bulkUploadCases(){
 /* ================= CASE DETAIL / TIMELINE ================= */
 async function openCase(id, silentRefresh){
   activeCaseId = id;
-  let c = allCases.find(x=>x.id===id);
+  // पहले local caches में खोजें (कोई नया network read नहीं करना पड़ेगा) —
+  // allCases: सामान्य scoped सूची, anyServiceCases: "सेवा एंट्री" टैब की पूरे-ज़िले वाली सूची
+  let c = allCases.find(x=>x.id===id) || anyServiceCases.find(x=>x.id===id);
   if(!c){
-    // यह केस उपयोगकर्ता के सामान्य scoped दायरे (गाँव/उप-केंद्र/सुविधा) से बाहर हो सकता है —
-    // जैसे "सेवा एंट्री (किसी भी संस्थान पर)" खोज से खोला गया केस — सीधे Firestore से लाएँ।
     try{
       const snap = await db.collection('hrp_cases').doc(id).get();
-      if(!snap.exists) return;
+      if(!snap.exists){
+        if(!silentRefresh) alert('यह केस नहीं मिला — हो सकता है वह हटा दिया गया हो।');
+        return;
+      }
       c = {id: snap.id, ...snap.data()};
-    }catch(e){ console.error(e); return; }
+    }catch(e){
+      console.error('openCase: hrp_cases fetch error:', e);
+      if(!silentRefresh) alert('केस लोड करने में त्रुटि हुई:\n' + e.message + '\n\nयदि यह "Missing or insufficient permissions" कहे, तो कृपया यह संदेश स्क्रीनशॉट लेकर भेजें ताकि Firestore Rules ठीक की जा सकें।');
+      return;
+    }
   }
   const modal = document.getElementById('caseModalOverlay');
   const body = document.getElementById('caseModalBody');
   modal.classList.remove('hidden');
 
-  const visitsSnap = await db.collection('hrp_visits').where('caseId','==', id).orderBy('date','desc').get();
-  const visits = visitsSnap.docs.map(d=>({id:d.id, ...d.data()}));
+  let visits = [];
+  try{
+    const visitsSnap = await db.collection('hrp_visits').where('caseId','==', id).orderBy('date','desc').get();
+    visits = visitsSnap.docs.map(d=>({id:d.id, ...d.data()}));
+  }catch(e){
+    console.error('openCase: hrp_visits fetch error:', e);
+    if(!silentRefresh) alert('विज़िट इतिहास लोड करने में त्रुटि हुई:\n' + e.message + '\n\nकेस के मूल विवरण अभी भी दिखेंगे, लेकिन पिछली सेवाओं की सूची खाली रहेगी।');
+  }
 
   const riskChipsHTML = (c.riskCategories||[]).map(r=>`<span class="badge red" style="margin:2px 4px 2px 0;">${esc(r)}</span>`).join('') || '<span class="small">—</span>';
 
@@ -1005,12 +1018,17 @@ async function addVisit(caseId){
     const statusEl = document.getElementById('v_hrpstatus'); if(statusEl) doc.hrpStatusIndicator = statusEl.value;
     const advEl = document.getElementById('v_nextadvice'); if(advEl) doc.nextVisitAdvice = advEl.value.trim();
   }
-  await db.collection('hrp_visits').add(doc);
-  const nextDue = document.getElementById('v_nextdue').value;
-  const updatePayload = { lastContactDate: date };
-  if(nextDue) updatePayload.nextDueDate = nextDue;
-  await db.collection('hrp_cases').doc(caseId).update(updatePayload);
-  openCase(caseId);
+  try{
+    await db.collection('hrp_visits').add(doc);
+    const nextDue = document.getElementById('v_nextdue').value;
+    const updatePayload = { lastContactDate: date };
+    if(nextDue) updatePayload.nextDueDate = nextDue;
+    await db.collection('hrp_cases').doc(caseId).update(updatePayload);
+    openCase(caseId);
+  }catch(e){
+    console.error('addVisit error:', e);
+    alert('सेवा प्रविष्टि सहेजने में त्रुटि हुई:\n' + e.message + '\n\nयदि यह "Missing or insufficient permissions" कहे, तो यह संदेश स्क्रीनशॉट लेकर भेजें ताकि Firestore Rules ठीक की जा सकें।');
+  }
 }
 
 /* ================= MY PASSWORD ================= */
