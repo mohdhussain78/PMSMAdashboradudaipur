@@ -190,11 +190,11 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
       <div class="panel">
         <h3>HRP सेवा एंट्री — किसी भी स्वास्थ्य संस्थान पर / Service Entry at Any Facility</h3>
         <div class="small" style="margin-bottom:10px;">
-          यदि कोई HRP महिला अपने पंजीकृत क्षेत्र (गाँव/उप-केंद्र/सुविधा) के अतिरिक्त ज़िले के किसी भी अन्य स्वास्थ्य संस्थान — उच्च सुविधा ANC, PMSMA, रेफरल, प्रसव आदि — पर सेवा लेने आती है, तो उसे यहाँ PCTS ID या नाम से खोजें। उसे अब तक — वर्तमान व पूर्व में — दी गई सभी सेवाओं, परामर्श व treatment का पूरा रिकॉर्ड दिखेगा, ताकि उसी आधार पर आगे इलाज तय हो सके, और आप यहीं से नई सेवा प्रविष्टि जोड़ सकते हैं।
+          यहाँ ज़िले के <b>सभी पंजीकृत HRP केस</b> (नई मैन्युअल पंजीकरण व Excel Bulk Upload — दोनों से जोड़े गए) स्वतः, real-time में सूचीबद्ध दिखते हैं — चाहे वह किसी भी गाँव/उप-केंद्र/सुविधा से जुड़े हों। PCTS ID / नाम / गाँव / सुविधा से खोजकर छाँट सकते हैं। किसी भी केस पर क्लिक कर उसे अब तक दी गई सभी सेवाओं का रिकॉर्ड देखें और नई सेवा प्रविष्टि जोड़ें।
         </div>
         <div class="filterbar">
-          <input class="grow" id="as_query" placeholder="PCTS ID (15 अंक) या महिला का नाम / गाँव लिखें..." onkeydown="if(event.key==='Enter')searchAnyCase()">
-          <button class="btn small" onclick="searchAnyCase()">🔍 खोजें</button>
+          <input class="grow" id="as_query" placeholder="PCTS ID / नाम / गाँव / सुविधा से खोजें..." oninput="renderAnyServiceList()">
+          <button class="btn small" onclick="renderAnyServiceList()">🔍 खोजें</button>
         </div>
         <div class="caselist" id="as_results"></div>
       </div>
@@ -401,6 +401,8 @@ let allVisits = {};     // caseId -> [visits]
 let allUsers = [];
 let activeCaseId = null;
 let unsubCases = null, unsubUsers = null;
+let unsubAnyService = null;
+let anyServiceCases = [];   // "सेवा एंट्री (किसी भी संस्थान पर)" टैब हेतु — पूरे ज़िले के सभी HRP केस, real-time
 
 /* ================= LOGIN ================= */
 function fillBlockSelects(){
@@ -441,7 +443,7 @@ async function doLogin(){
   }catch(e){ errEl.textContent = 'गलत Username या Password।'; }
 }
 function doLogout(){
-  if(unsubCases) unsubCases(); if(unsubUsers) unsubUsers();
+  if(unsubCases) unsubCases(); if(unsubUsers) unsubUsers(); stopAnyServiceListener();
   auth.signOut();
 }
 auth.onAuthStateChanged(async (user)=>{
@@ -507,7 +509,7 @@ function switchTab(name){
   });
   if(name==='dashboard') renderDashboard();
   if(name==='list') renderCaseList();
-  if(name==='anyservice'){ document.getElementById('as_query').value=''; document.getElementById('as_results').innerHTML=''; }
+  if(name==='anyservice'){ startAnyServiceListener(); } else { stopAnyServiceListener(); }
 }
 function toggleUserScopeFields(){
   const role = document.getElementById('nu_role').value;
@@ -610,30 +612,40 @@ function renderCaseList(){
 }
 
 /* ================= SERVICE ENTRY AT ANY FACILITY (district-wide search) ================= */
-async function searchAnyCase(){
-  const raw = (document.getElementById('as_query').value||'').trim();
+function startAnyServiceListener(){
+  if(unsubAnyService) return; // पहले से चल रहा है
   const resEl = document.getElementById('as_results');
-  if(!raw){ resEl.innerHTML = '<div class="emptynote">PCTS ID या नाम/गाँव लिखकर खोजें।</div>'; return; }
-  resEl.innerHTML = '<div class="emptynote">पूरे ज़िले के रिकॉर्ड में खोजा जा रहा है...</div>';
-  try{
-    let results = [];
-    if(/^\d{15}$/.test(raw)){
-      const snap = await db.collection('hrp_cases').where('pctsId','==', raw).limit(1).get();
-      results = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    }else{
-      const q = raw.toLowerCase();
-      // ज़िले के सभी केस में खोजें (यह टैब जानबूझकर scope-मुक्त है, ताकि किसी भी संस्थान पर सेवा दर्ज हो सके)
-      const snap = await db.collection('hrp_cases').get();
-      results = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>
-        (c.name||'').toLowerCase().includes(q) ||
-        (c.pctsId||'').includes(raw) ||
-        (c.village||'').toLowerCase().includes(q)
-      ).slice(0,40);
-    }
-    resEl.innerHTML = results.length ? results.map(caseCardHTML).join('') : '<div class="emptynote">कोई केस नहीं मिला। PCTS ID की जाँच करें या नाम की स्पेलिंग बदलकर देखें।</div>';
-  }catch(e){
-    resEl.innerHTML = `<div class="emptynote">खोज में त्रुटि: ${esc(e.message)}</div>`;
+  if(resEl) resEl.innerHTML = '<div class="emptynote">ज़िले के सभी HRP केस लोड हो रहे हैं...</div>';
+  // जानबूझकर scope-मुक्त listener — ताकि नए पंजीकृत व Excel से Bulk Upload किए गए केस भी
+  // तुरंत (real-time) यहाँ दिखें, चाहे किसी भी गाँव/उप-केंद्र/सुविधा के हों
+  unsubAnyService = db.collection('hrp_cases').onSnapshot(snap=>{
+    anyServiceCases = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderAnyServiceList();
+  }, err=>{
+    if(resEl) resEl.innerHTML = `<div class="emptynote">डेटा लोड करने में त्रुटि: ${esc(err.message)}</div>`;
+  });
+}
+function stopAnyServiceListener(){
+  if(unsubAnyService){ unsubAnyService(); unsubAnyService = null; }
+}
+function renderAnyServiceList(){
+  const resEl = document.getElementById('as_results');
+  if(!resEl) return;
+  const raw = (document.getElementById('as_query').value||'').trim();
+  const q = raw.toLowerCase();
+  let list = anyServiceCases;
+  if(q){
+    list = list.filter(c=>
+      (c.name||'').toLowerCase().includes(q) ||
+      (c.pctsId||'').includes(raw) ||
+      (c.village||'').toLowerCase().includes(q) ||
+      (c.facility||'').toLowerCase().includes(q) ||
+      (c.subcenter||'').toLowerCase().includes(q)
+    );
   }
+  // सबसे नए पंजीकृत / अपलोड किए गए केस सबसे ऊपर
+  list = [...list].sort((a,b)=>(b.registeredDate||'').localeCompare(a.registeredDate||''));
+  resEl.innerHTML = list.length ? list.map(caseCardHTML).join('') : '<div class="emptynote">कोई HRP केस नहीं मिला।</div>';
 }
 
 /* ================= REGISTER ================= */
