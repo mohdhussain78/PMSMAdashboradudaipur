@@ -813,8 +813,10 @@ async function openCase(id, silentRefresh){
 
   let visits = [];
   try{
-    const visitsSnap = await db.collection('hrp_visits').where('caseId','==', id).orderBy('date','desc').get();
-    visits = visitsSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    const visitsSnap = await db.collection('hrp_visits').where('caseId','==', id).get();
+    const toMs = (t)=> (t && typeof t.toMillis==='function') ? t.toMillis() : 0;
+    visits = visitsSnap.docs.map(d=>({id:d.id, ...d.data()}))
+      .sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (toMs(b.createdAt)-toMs(a.createdAt)));
   }catch(e){
     console.error('openCase: hrp_visits fetch error:', e);
     if(!silentRefresh) alert('विज़िट इतिहास लोड करने में त्रुटि हुई:\n' + e.message + '\n\nकेस के मूल विवरण अभी भी दिखेंगे, लेकिन पिछली सेवाओं की सूची खाली रहेगी।');
@@ -905,6 +907,19 @@ async function openCase(id, silentRefresh){
       <div class="field"><label>प्लेटफ़ॉर्म</label><select id="v_platform">${PLATFORM_OPTIONS.map(p=>`<option>${p}</option>`).join('')}</select></div>
       <div class="field"><label>BP</label><input id="v_bp" placeholder="जैसे 120/80"></div>
       <div class="field"><label>Hb (g/dl)</label><input id="v_hb" type="number" step="0.1"></div>
+      <div class="field"><label>Sugar (blood sugar reading)</label><input id="v_sugar" placeholder="जैसे 110 mg/dl (RBS)"></div>
+      <div class="field"><label>Urine Test</label>
+        <select id="v_urine"><option value="">-- चयन करें --</option><option value="+ve">+ve</option><option value="-ve">-ve</option><option value="जांच नहीं हुई">जांच नहीं हुई</option></select>
+      </div>
+      <div class="field"><label>HIV (अज्ञात स्थिति हेतु / for unknown status)</label>
+        <select id="v_hiv"><option value="">-- चयन करें --</option><option value="Reactive">Reactive</option><option value="Non-Reactive">Non-Reactive</option><option value="पहले से ज्ञात">पहले से ज्ञात (Known Status)</option><option value="जांच नहीं हुई">जांच नहीं हुई</option></select>
+      </div>
+      <div class="field"><label>Syphilis Investigation</label>
+        <select id="v_syphilis"><option value="">-- चयन करें --</option><option value="Reactive">Reactive</option><option value="Non-Reactive">Non-Reactive</option><option value="जांच नहीं हुई">जांच नहीं हुई</option></select>
+      </div>
+      <div class="field"><label>IV Sucrose</label><input id="v_ivsucrose" placeholder="जैसे: 2 डोज़ दी गई / नहीं"></div>
+      <div class="field"><label>FCM (Ferric Carboxymaltose)</label><input id="v_fcm" placeholder="जैसे: 500mg दी गई / नहीं"></div>
+      <div class="field"><label>Blood Transfusion</label><input id="v_bloodtx" placeholder="जैसे: 1 यूनिट PCV दी गई / नहीं"></div>
     </div>
     <div class="field"><label>इस विज़िट पर दी गई सेवाएं / Services Provided (एक या अधिक चुनें)</label></div>
     <div class="chipset" id="v_services_chips">${SERVICE_OPTIONS.map(s=>`<span class="chip" data-c="${esc(s)}" onclick="this.classList.toggle('on')">${esc(s)}</span>`).join('')}</div>
@@ -948,7 +963,8 @@ async function openCase(id, silentRefresh){
           <div class="plat">${esc(v.platform)}</div>
           <div class="dt">${v.date}${v.ambulance?` · एम्बुलेंस ${v.ambulance}`:''}</div>
           ${v.servicesProvided&&v.servicesProvided.length?`<div class="txt"><b>दी गई सेवाएं:</b> ${v.servicesProvided.map(esc).join(', ')}</div>`:''}
-          <div class="txt">${v.bp?`BP: ${esc(v.bp)} `:''}${v.hb?`Hb: ${v.hb} `:''}${v.findings?`— ${esc(v.findings)}`:''}</div>
+          <div class="txt">${v.bp?`BP: ${esc(v.bp)} `:''}${v.hb?`Hb: ${v.hb} `:''}${v.sugar?`Sugar: ${esc(v.sugar)} `:''}${v.urineTest?`Urine: ${esc(v.urineTest)} `:''}${v.hiv?`HIV: ${esc(v.hiv)} `:''}${v.syphilis?`Syphilis: ${esc(v.syphilis)} `:''}${v.findings?`— ${esc(v.findings)}`:''}</div>
+          ${(v.ivSucrose||v.fcm||v.bloodTransfusion)?`<div class="txt">${v.ivSucrose?`IV Sucrose: ${esc(v.ivSucrose)} `:''}${v.fcm?`FCM: ${esc(v.fcm)} `:''}${v.bloodTransfusion?`Blood Transfusion: ${esc(v.bloodTransfusion)}`:''}</div>`:''}
           ${v.action?`<div class="txt">कार्यवाही/अन्य विवरण: ${esc(v.action)}</div>`:''}
           ${v.counselingTopics&&v.counselingTopics.length?`<div class="txt">परामर्श: ${v.counselingTopics.map(esc).join(', ')}</div>`:''}
           ${v.mobilization?`<div class="txt">Mobilization: ${esc(v.mobilization)}</div>`:''}
@@ -1003,6 +1019,13 @@ async function addVisit(caseId){
   const doc = {
     caseId, date, platform: document.getElementById('v_platform').value,
     bp: document.getElementById('v_bp').value.trim(), hb: document.getElementById('v_hb').value ? Number(document.getElementById('v_hb').value) : null,
+    sugar: document.getElementById('v_sugar').value.trim(),
+    urineTest: document.getElementById('v_urine').value,
+    hiv: document.getElementById('v_hiv').value,
+    syphilis: document.getElementById('v_syphilis').value,
+    ivSucrose: document.getElementById('v_ivsucrose').value.trim(),
+    fcm: document.getElementById('v_fcm').value.trim(),
+    bloodTransfusion: document.getElementById('v_bloodtx').value.trim(),
     servicesProvided: Array.from(document.getElementById('v_services_chips').querySelectorAll('.chip.on')).map(c=>c.dataset.c),
     findings: document.getElementById('v_findings').value.trim(), action: document.getElementById('v_action').value.trim(),
     ambulance: document.getElementById('v_ambulance').value,
@@ -1164,7 +1187,7 @@ function exportCSV(){
 function esc(s){ return (s??'').toString().replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
 async function exportFullReportCSV(){
-  const headers = ['PCTS ID','Name','Village','Block','RiskLevel','Status','VisitDate','Platform','BP','Hb','Findings','Action','Ambulance','EnteredBy','EnteredRole'];
+  const headers = ['PCTS ID','Name','Village','Block','RiskLevel','Status','VisitDate','Platform','BP','Hb','Sugar','UrineTest','HIV','Syphilis','IVSucrose','FCM','BloodTransfusion','Findings','Action','Ambulance','EnteredBy','EnteredRole'];
   const allRows = [];
   const visitsSnap = await db.collection('hrp_visits').get();
   const visitsByCase = {};
@@ -1176,10 +1199,10 @@ async function exportFullReportCSV(){
   allCases.forEach(c=>{
     const visits = visitsByCase[c.id]||[];
     if(!visits.length){
-      allRows.push([c.pctsId,c.name,c.village,c.block,c.riskLevel,c.status,'','','','','','','','','']);
+      allRows.push([c.pctsId,c.name,c.village,c.block,c.riskLevel,c.status,'','','','','','','','','','','','','','','','']);
     }else{
       visits.forEach(v=>{
-        allRows.push([c.pctsId,c.name,c.village,c.block,c.riskLevel,c.status,v.date,v.platform,v.bp,v.hb,v.findings,v.action,v.ambulance,v.enteredByName,v.enteredByRole]);
+        allRows.push([c.pctsId,c.name,c.village,c.block,c.riskLevel,c.status,v.date,v.platform,v.bp,v.hb,v.sugar,v.urineTest,v.hiv,v.syphilis,v.ivSucrose,v.fcm,v.bloodTransfusion,v.findings,v.action,v.ambulance,v.enteredByName,v.enteredByRole]);
       });
     }
   });
