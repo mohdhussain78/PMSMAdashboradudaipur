@@ -155,6 +155,13 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
   <main>
     <!-- DASHBOARD -->
     <section id="tab-dashboard">
+      <div class="panel" style="padding-bottom:10px;">
+        <div class="filterbar" style="margin:0;">
+          <div class="field" style="margin:0;"><label>ब्लॉक</label><select id="db_block" onchange="onDbBlockChange()"><option value="">सभी ब्लॉक</option></select></div>
+          <div class="field" style="margin:0;"><label>सुविधा (Facility)</label><select id="db_facility" onchange="renderDashboard()"><option value="">सभी सुविधाएं</option></select></div>
+          <button class="btn small ghost" style="align-self:flex-end;" onclick="document.getElementById('db_block').value='';document.getElementById('db_facility').value='';onDbBlockChange();">फ़िल्टर हटाएं</button>
+        </div>
+      </div>
       <div class="statrow" id="statRow"></div>
       <div class="panel">
         <h3>श्रेणी अनुसार सक्रिय HRP / Active HRP by Risk Category (आपके क्षेत्र में)</h3>
@@ -613,12 +620,32 @@ function isDueSoon(c){
   const d = daysBetween(new Date(new Date().toDateString()), new Date(c.nextDueDate));
   return d>=0 && d<=3;
 }
+function populateDashboardFilters(){
+  const blockSel = document.getElementById('db_block');
+  const curBlock = blockSel.value;
+  const blocks = Array.from(new Set(allCases.map(c=>c.block).filter(Boolean))).sort();
+  blockSel.innerHTML = '<option value="">सभी ब्लॉक</option>' + blocks.map(b=>`<option value="${esc(b)}" ${b===curBlock?'selected':''}>${esc(b)}</option>`).join('');
+}
+function onDbBlockChange(){
+  const block = document.getElementById('db_block').value;
+  const facSel = document.getElementById('db_facility');
+  const curFac = facSel.value;
+  const facilities = Array.from(new Set(allCases.filter(c=>!block || c.block===block).map(c=>c.facility).filter(Boolean))).sort();
+  facSel.innerHTML = '<option value="">सभी सुविधाएं</option>' + facilities.map(f=>`<option value="${esc(f)}" ${f===curFac?'selected':''}>${esc(f)}</option>`).join('');
+  if(!facilities.includes(curFac)) facSel.value = '';
+  renderDashboard();
+}
 function renderDashboard(){
-  const active = allCases.filter(c=>c.status==='active');
+  populateDashboardFilters();
+  const blockF = document.getElementById('db_block').value;
+  const facF = document.getElementById('db_facility').value;
+  const scoped = allCases.filter(c => (!blockF || c.block===blockF) && (!facF || c.facility===facF));
+
+  const active = scoped.filter(c=>c.status==='active');
   const red = active.filter(c=>c.riskLevel==='red');
   const overdue = active.filter(isOverdue);
-  const delivered = allCases.filter(c=>c.status==='delivered');
-  const referred = allCases.filter(c=>c.status==='referred');
+  const delivered = scoped.filter(c=>c.status==='delivered');
+  const referred = scoped.filter(c=>c.status==='referred');
   document.getElementById('statRow').innerHTML = `
     <div class="statcard maroon"><div class="num">${active.length}</div><div class="lbl">सक्रिय HRP केस</div></div>
     <div class="statcard red"><div class="num">${red.length}</div><div class="lbl">उच्च जोखिम (Red)</div></div>
