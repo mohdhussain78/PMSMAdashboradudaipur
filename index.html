@@ -205,6 +205,23 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
       </div>
     </section>
 
+    <!-- DAILY SERVICE REPORT (facility/block/district) -->
+    <section id="tab-dailyreport" class="hidden">
+      <div class="panel">
+        <h3>दैनिक सेवा रिपोर्ट / Daily Service Report</h3>
+        <div class="small" style="margin-bottom:10px;">
+          यह रिपोर्ट आपके क्षेत्र (facility/block/district अनुसार) की उन सभी HRP महिलाओं को दिखाती है जिन्हें चुनी गई तारीख़ को <b>कहीं भी (किसी भी संस्थान/प्लेटफ़ॉर्म पर)</b> कोई सेवा दी गई — चाहे वह सेवा किसी अन्य facility पर ही क्यों न दी गई हो।
+        </div>
+        <div class="filterbar">
+          <div class="field" style="margin:0;"><label>तारीख़ चुनें</label><input type="date" id="dr_date"></div>
+          <button class="btn small" style="align-self:flex-end;" onclick="runDailyServiceReport()">रिपोर्ट देखें</button>
+          <button class="btn small ghost" style="align-self:flex-end;" onclick="exportDailyReportCSV()">Excel निर्यात</button>
+        </div>
+        <div class="small" id="dr_summary" style="margin:10px 0;font-weight:700;"></div>
+        <div class="tablewrap"><table class="linelist" id="dr_table"></table></div>
+      </div>
+    </section>
+
     <!-- REGISTER -->
     <section id="tab-register" class="hidden">
       <div class="panel">
@@ -230,7 +247,7 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
         <div class="field" style="margin-top:10px;"><label>अन्य विवरण / Clinical Notes</label><textarea id="r_notes"></textarea></div>
         <div class="grid2" style="margin-top:6px;">
           <div class="field"><label>जोखिम स्तर / Risk Level *</label>
-            <select id="r_level"><option value="red">उच्च (Red)</option><option value="yellow" selected>मध्यम (Yellow)</option><option value="green">निम्न (Green)</option></select>
+            <select id="r_level"><option value="red" selected>उच्च (Red)</option><option value="yellow">मध्यम (Yellow)</option><option value="green">निम्न (Green)</option></select>
           </div>
           <div class="field"><label>अगली अनुवर्ती तिथि / Next Follow-up Due</label><input id="r_nextdue" type="date"></div>
         </div>
@@ -501,6 +518,7 @@ auth.onAuthStateChanged(async (user)=>{
 function tabsForRole(role){
   const base = [['dashboard','डैशबोर्ड'],['list','HRP सूची']];
   if(['anm','facility','block','district','admin'].includes(role)) base.push(['anyservice','सेवा एंट्री (किसी भी संस्थान पर)']);
+  if(['facility','block','district','admin'].includes(role)) base.push(['dailyreport','दैनिक सेवा रिपोर्ट']);
   if(['asha','anm','facility','block','district','admin'].includes(role)) base.push(['register','नया पंजीकरण']);
   base.push(['mypass','मेरा पासवर्ड']);
   if(role==='admin') base.push(['users','उपयोगकर्ता']);
@@ -543,12 +561,13 @@ function enterApp(){
 function switchTab(name){
   activeTab = name;
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
-  ['dashboard','list','anyservice','register','mypass','users'].forEach(t=>{
+  ['dashboard','list','anyservice','dailyreport','register','mypass','users'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('hidden', t!==name);
   });
   if(name==='dashboard') renderDashboard();
   if(name==='list') renderCaseList();
   if(name==='anyservice') renderAnyServiceList();
+  if(name==='dailyreport') runDailyServiceReport();
 }
 function toggleUserScopeFields(){
   const role = document.getElementById('nu_role').value;
@@ -747,7 +766,7 @@ async function registerCase(){
     await db.collection('hrp_cases').add(doc);
     document.querySelectorAll('#tab-register input, #tab-register textarea').forEach(i=>{ if(!['r_village','r_subcenter','r_facility'].includes(i.id) || !['asha','anm','facility'].includes(currentUser.role)) i.value=''; });
     document.querySelectorAll('#riskChips .chip.on').forEach(c=>c.classList.remove('on'));
-    document.getElementById('r_level').value='yellow';
+    document.getElementById('r_level').value='red';
     alert('HRP केस सफलतापूर्वक दर्ज किया गया।');
     switchTab('list');
   }catch(e){ errEl.textContent = 'त्रुटि: '+e.message; }
@@ -839,8 +858,8 @@ async function bulkUploadCases(){
     try{
       const dupSnap = await db.collection('hrp_cases').where('pctsId','==', pctsId).limit(1).get();
       if(!dupSnap.empty){ skipped++; continue; }
-      const riskLevelRaw = String(row.RiskLevel||row.risklevel||'yellow').trim().toLowerCase();
-      const riskLevel = ['red','yellow','green'].includes(riskLevelRaw) ? riskLevelRaw : 'yellow';
+      const riskLevelRaw = String(row.RiskLevel||row.risklevel||'red').trim().toLowerCase();
+      const riskLevel = ['red','yellow','green'].includes(riskLevelRaw) ? riskLevelRaw : 'red';
       const catsRaw = String(row.RiskCategories||row.riskcategories||'').split(';').map(s=>s.trim()).filter(Boolean);
       const riskCategories = catsRaw.filter(c=>RISK_CATEGORIES.includes(c));
       const doc = {
@@ -971,6 +990,7 @@ async function openCase(id, silentRefresh){
       </div>
       <div>
         ${currentUser.canEditEntries?`<button class="btn small ghost" style="margin-inline-end:6px;" onclick="toggleEditCase()">✎ संपादित करें</button>`:''}
+        ${currentUser.role==='admin'?`<button class="btn small ghost" style="margin-inline-end:6px;color:#b00020;border-color:#b00020;" onclick="deleteCase('${id}')">🗑 केस हटाएं</button>`:''}
         <button onclick="closeModal()">✕</button>
       </div>
     </div>
@@ -1122,6 +1142,20 @@ function closeModal(){ activeCaseId=null; document.getElementById('caseModalOver
 function toggleEditCase(){
   document.getElementById('viewDetailsBlock').classList.toggle('hidden');
   document.getElementById('editDetailsBlock').classList.toggle('hidden');
+}
+async function deleteCase(id){
+  const c = allCases.find(x=>x.id===id) || anyServiceCases.find(x=>x.id===id);
+  const label = c ? `${c.name} (PCTS: ${c.pctsId||'—'})` : 'यह केस';
+  if(!confirm(`क्या आप वाकई ${label} को स्थायी रूप से हटाना चाहते हैं? इसकी सभी फॉलो-अप/सेवा प्रविष्टियाँ भी हट जाएँगी। यह कार्य वापस नहीं लिया जा सकता।`)) return;
+  try{
+    const visitsSnap = await db.collection('hrp_visits').where('caseId','==', id).get();
+    const batch = db.batch();
+    visitsSnap.docs.forEach(d=> batch.delete(d.ref));
+    batch.delete(db.collection('hrp_cases').doc(id));
+    await batch.commit();
+    closeModal();
+    alert('केस सफलतापूर्वक हटा दिया गया।');
+  }catch(e){ alert('त्रुटि: '+e.message); }
 }
 async function saveCaseEdit(id){
   const errEl = document.getElementById('e_err'); errEl.textContent='';
@@ -1377,6 +1411,67 @@ function exportCSV(){
 }
 
 function esc(s){ return (s??'').toString().replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+/* ================= DAILY SERVICE REPORT (facility/block/district) ================= */
+let lastDailyReportRows = [];
+async function runDailyServiceReport(){
+  const dateInput = document.getElementById('dr_date');
+  if(!dateInput.value) dateInput.value = new Date().toISOString().slice(0,10);
+  const date = dateInput.value;
+  const summaryEl = document.getElementById('dr_summary');
+  const tableEl = document.getElementById('dr_table');
+  summaryEl.textContent = 'लोड हो रहा है...';
+  tableEl.innerHTML = '';
+
+  // allCases पहले से ही भूमिका अनुसार scoped है (facility→अपनी facility, block→अपना block, district/admin→पूरा ज़िला)
+  const scopedIds = new Set(allCases.map(c=>c.id));
+  const caseById = {}; allCases.forEach(c=> caseById[c.id]=c);
+
+  let visitsSnap;
+  try{
+    visitsSnap = await db.collection('hrp_visits').where('date','==', date).get();
+  }catch(e){ summaryEl.textContent = 'त्रुटि: '+e.message; return; }
+
+  const platformsByCase = {};
+  visitsSnap.docs.forEach(d=>{
+    const v = d.data();
+    if(!scopedIds.has(v.caseId)) return; // यह केस हमारे क्षेत्र का नहीं
+    if(!platformsByCase[v.caseId]) platformsByCase[v.caseId] = [];
+    platformsByCase[v.caseId].push(v.platform||'—');
+  });
+
+  const rows = Object.keys(platformsByCase).map(caseId=>{
+    const c = caseById[caseId];
+    if(!c) return null;
+    return { c, platforms: platformsByCase[caseId] };
+  }).filter(Boolean);
+  rows.sort((a,b)=> (a.c.block||'').localeCompare(b.c.block||'') || (a.c.name||'').localeCompare(b.c.name||''));
+  lastDailyReportRows = rows;
+
+  const scopeLabel = {facility:'सुविधा: '+currentUser.facilityName, block:'ब्लॉक: '+currentUser.blockName, district:'संपूर्ण ज़िला', admin:'संपूर्ण ज़िला'}[currentUser.role] || '';
+  summaryEl.textContent = `दिनांक ${date} को सेवा प्राप्त करने वाली कुल HRP: ${rows.length}  (${scopeLabel})`;
+
+  if(!rows.length){ tableEl.innerHTML = '<tbody><tr><td>इस तारीख़ को इस क्षेत्र में किसी HRP को कोई सेवा दर्ज नहीं हुई।</td></tr></tbody>'; return; }
+
+  const riskLabel = {red:'उच्च (Red)',yellow:'मध्यम (Yellow)',green:'निम्न (Green)'};
+  tableEl.innerHTML = `<thead><tr><th>PCTS ID</th><th>नाम</th><th>गाँव</th><th>ब्लॉक</th><th>होम सुविधा</th><th>जोखिम स्तर</th><th>आज दी गई सेवा (प्लेटफ़ॉर्म)</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr onclick="openCase('${r.c.id}')" style="cursor:pointer;">
+      <td>${esc(r.c.pctsId||'—')}</td><td>${esc(r.c.name)}</td><td>${esc(r.c.village||'-')}</td><td>${esc(r.c.block||'-')}</td>
+      <td>${esc(r.c.facility||'-')}</td><td>${riskLabel[r.c.riskLevel]||'-'}</td><td>${esc(Array.from(new Set(r.platforms)).join('; '))}</td>
+    </tr>`).join('')}</tbody>`;
+}
+function exportDailyReportCSV(){
+  if(!lastDailyReportRows.length){ alert('पहले रिपोर्ट देखें बटन दबाएं।'); return; }
+  const date = document.getElementById('dr_date').value;
+  const headers = ['Date','PCTS ID','Name','Village','Block','HomeFacility','RiskLevel','PlatformsServicedToday'];
+  const csvRows = lastDailyReportRows.map(r=>[date,r.c.pctsId,r.c.name,r.c.village,r.c.block,r.c.facility,r.c.riskLevel,Array.from(new Set(r.platforms)).join('; ')]);
+  const csv = [headers.join(',')].concat(csvRows.map(r=>r.map(v=>`"${(v??'').toString().replace(/"/g,'""')}"`).join(','))).join('\n');
+  const blob = new Blob(["\ufeff"+csv], {type:'text/csv;charset=utf-8;'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'HRP_Daily_Service_Report_'+date+'.csv';
+  link.click();
+}
 
 async function exportFullReportCSV(){
   const headers = ['PCTS ID','Name','Village','Block','RiskLevel','Status','VisitDate','Platform','BP','Hb','Sugar','UrineTest','HIV','Syphilis','IVSucrose','FCM','BloodTransfusion','Findings','Action','Ambulance','EnteredBy','EnteredRole'];
