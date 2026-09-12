@@ -12,6 +12,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 
 <style>
 :root{
@@ -156,6 +157,10 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
     <section id="tab-dashboard">
       <div class="statrow" id="statRow"></div>
       <div class="panel">
+        <h3>श्रेणी अनुसार सक्रिय HRP / Active HRP by Risk Category (आपके क्षेत्र में)</h3>
+        <div id="categoryStats" class="small"></div>
+      </div>
+      <div class="panel">
         <h3>⚠ अनुवर्ती लंबित / Overdue Follow-up</h3>
         <div class="caselist" id="overdueList"></div>
       </div>
@@ -240,7 +245,7 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
           <b>PCTSID, Name, HusbandName, Age, GravidaParity, Village, Block, Subcenter, Facility, ASHAName, ASHAPhone, ANMName, LMP, EDD, RiskLevel, RiskCategories, Notes, NextDueDate</b><br>
           · <b>PCTSID</b> ठीक 15 अंकों का होना चाहिए — जो PCTS ID पहले से दर्ज है वह पंक्ति स्वतः छोड़ दी जाएगी (डुप्लीकेट नहीं बनेगा)।<br>
           · <b>RiskLevel</b> में red / yellow / green लिखें (खाली छोड़ने पर yellow माना जाएगा)।<br>
-          · <b>RiskCategories</b> में एक से अधिक श्रेणी को अर्धविराम ( ; ) से अलग कर लिखें (सूची ऊपर "जोखिम श्रेणियाँ" में देखें)।<br>
+          · <b>RiskCategories</b> में एक से अधिक श्रेणी को अर्धविराम ( ; ) से अलग कर लिखें (सूची ऊपर "जोखिम श्रेणियाँ" में देखें)। डाउनलोड किए गए टेम्पलेट में इस कॉलम पर क्लिक करने पर सही स्पेलिंग हेतु एक ड्रॉप-डाउन सूची भी दिखेगी — प्रारूप/कॉलम संरचना में कोई बदलाव नहीं है, केवल चयन आसान बनाने हेतु सूची जोड़ी गई है।<br>
           · तिथियाँ (LMP, EDD, NextDueDate) <code>yyyy-mm-dd</code> या <code>dd/mm/yyyy</code> प्रारूप में लिखें।<br>
           · अपलोड के बाद सभी केस तुरंत (real-time) डैशबोर्ड व HRP सूची में — हर उपयोगकर्ता को उसकी भूमिका/अधिकार के अनुसार — दिखने लगेंगे, और कोई भी अधिकृत उपयोगकर्ता उनमें फ़ॉलो-अप सेवा प्रविष्टि जोड़ सकेगा।
           <div id="bulkCaseScopeNote" style="margin-top:4px;color:var(--maroon-dark);font-weight:600;"></div>
@@ -353,11 +358,35 @@ function usernameToEmail(u){
 const BLOCKS = ["Girwa","Badgaon","Mavli","Vallabhnagar","Girwa Urban","Salumber","Sarada","Jhadol","Kherwada","Kotra","Gogunda","Rishabdev","Lasadiya","Bhinder","Kanod"];
 
 const RISK_CATEGORIES = [
-  "गंभीर रक्ताल्पता (Hb<7) Severe Anemia","PIH / Pre-eclampsia / Eclampsia","रक्तस्राव APH/PPH history",
-  "पूर्व सिजेरियन / Scarred Uterus","असामान्य स्थिति / Malpresentation","जुड़वाँ / बहु गर्भ Multiple Pregnancy",
-  "Rh Negative","GDM / मधुमेह","HIV Reactive","Syphilis Reactive","Hepatitis B Reactive","टीबी / TB",
-  "हृदय रोग / Heart Disease","कम कद (<145cm)","किशोरावस्था गर्भ (<19yrs) Teenage Pregnancy",
-  "अधिक आयु / ग्रैंड मल्टीपैरा","खराब प्रसूति इतिहास BOH","मलेरिया","अन्य / Other"
+  "उच्च रक्तचाप (Hypertension) ->140/90",
+  "मधुमेह (डायबिटीज)",
+  "ए.पी.एच (APH)",
+  "मलेरिया",
+  "गंभीर एनीमिया- <7Hb",
+  "आयु (<18 Yr. />35Yr.)",
+  "कम लंबाई (<140 Cm.)",
+  "पूर्व में जटिल प्रसव का इतिहास",
+  "आड़ा बच्चा/ब्रीच प्रस्तुति",
+  "हृदय रोग",
+  "गुर्दे की बीमारी",
+  "हेपेटाइटिस-बी",
+  "लक्षण रहित जीवाणु मूत्र संक्रमण",
+  "HIV रिएक्टिव",
+  "सिफिलिस रिएक्टिव",
+  "हाइपोथायरॉइडिज़्म",
+  "टीबी पॉजिटिव",
+  "RTI/STI पॉजिटिव",
+  "RH निगेटिव रक्त समूह",
+  "उच्च बुखार",
+  "खराब प्रसूति इतिहास",
+  "गर्भपात/मृत जन्म का इतिहास",
+  "किशोरावस्था में गर्भावस्था",
+  "अत्यधिक बहुप्रसवा (ग्रैंड मल्टीपैरा)",
+  "CPD (संकुचित श्रोणी/सिर एवं श्रोणी में असंगति)",
+  "जुड़वा/अनेक गर्भावस्था",
+  "असामान्य भ्रूण हृदय गति (Abnormal FHR)",
+  "एक्लेम्पसिया (गर्भावस्था में दौरे/मिर्गी)",
+  "अन्य"
 ];
 
 const PLATFORM_OPTIONS = [
@@ -506,6 +535,7 @@ function enterApp(){
       : '';
   }
   listenCases();
+  startAnyServiceListener(); // "HRP सूची" व "सेवा एंट्री" — दोनों टैब में पूरे ज़िले के HRP दिखाने हेतु, लॉगिन के साथ ही शुरू
   if(currentUser.role==='admin') listenUsers();
   const frBtn = document.getElementById('fullReportBtn');
   if(frBtn) frBtn.style.display = currentUser.role==='admin' ? 'inline-block' : 'none';
@@ -518,7 +548,7 @@ function switchTab(name){
   });
   if(name==='dashboard') renderDashboard();
   if(name==='list') renderCaseList();
-  if(name==='anyservice'){ startAnyServiceListener(); } else { stopAnyServiceListener(); }
+  if(name==='anyservice') renderAnyServiceList();
 }
 function toggleUserScopeFields(){
   const role = document.getElementById('nu_role').value;
@@ -580,6 +610,18 @@ function renderDashboard(){
   const list = overdue.sort((a,b)=> new Date(a.nextDueDate) - new Date(b.nextDueDate));
   document.getElementById('overdueList').innerHTML = list.length ? list.map(caseCardHTML).join('') :
     `<div class="emptynote">कोई अनुवर्ती लंबित नहीं है।</div>`;
+
+  // श्रेणी अनुसार वितरण — केवल उपयोगकर्ता के अपने क्षेत्र के सक्रिय HRP केस (allCases पहले से ही भूमिका अनुसार scoped है)
+  const catCounts = {};
+  RISK_CATEGORIES.forEach(cat=>{ catCounts[cat] = 0; });
+  active.forEach(c=>{ (c.riskCategories||[]).forEach(cat=>{ if(catCounts[cat]!==undefined) catCounts[cat]++; }); });
+  const catEntries = Object.entries(catCounts).filter(([,n])=>n>0).sort((a,b)=>b[1]-a[1]);
+  const catEl = document.getElementById('categoryStats');
+  if(catEl){
+    catEl.innerHTML = catEntries.length
+      ? `<div class="grid2">${catEntries.map(([cat,n])=>`<div>${esc(cat)}: <b>${n}</b></div>`).join('')}</div>`
+      : `<div class="emptynote">अभी कोई श्रेणी दर्ज नहीं है।</div>`;
+  }
 }
 
 /* ================= CASE LIST ================= */
@@ -602,10 +644,13 @@ function caseCardHTML(c){
   </div>`;
 }
 function renderCaseList(){
+  // ध्यान दें: यह टैब ("HRP सूची") जानबूझकर पूरे ज़िले का डेटा (anyServiceCases) दिखाता है,
+  // ताकि उपयोगकर्ता ज़रूरत पड़ने पर किसी भी HRP को यहीं से देख/खोज सके — जबकि डैशबोर्ड पर
+  // आंकड़े (allCases) उपयोगकर्ता के अपने क्षेत्र तक ही सीमित रहते हैं।
   const search = (document.getElementById('f_search')?.value||'').toLowerCase();
   const riskF = document.getElementById('f_risk')?.value;
   const statusF = document.getElementById('f_status')?.value;
-  let list = allCases.filter(c=>{
+  let list = anyServiceCases.filter(c=>{
     if(riskF && c.riskLevel!==riskF) return false;
     if(statusF && c.status!==statusF) return false;
     if(!statusF && !riskF && document.getElementById('f_status') && document.getElementById('f_status').value==='active' && c.status!=='active') return false;
@@ -630,6 +675,7 @@ function startAnyServiceListener(){
   unsubAnyService = db.collection('hrp_cases').onSnapshot(snap=>{
     anyServiceCases = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderAnyServiceList();
+    renderCaseList(); // "HRP सूची" टैब भी इसी पूरे-ज़िले वाले डेटा पर निर्भर है
   }, err=>{
     if(resEl) resEl.innerHTML = `<div class="emptynote">डेटा लोड करने में त्रुटि: ${esc(err.message)}</div>`;
   });
@@ -718,13 +764,44 @@ function toISODateStr(v){
   if(m){ const [,d,mo,y]=m; return `${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`; }
   return s;
 }
-function downloadCaseTemplate(){
+async function downloadCaseTemplate(){
   const headers = ['PCTSID','Name','HusbandName','Age','GravidaParity','Village','Block','Subcenter','Facility','ASHAName','ASHAPhone','ANMName','LMP','EDD','RiskLevel','RiskCategories','Notes','NextDueDate'];
-  const sample = ['123456789012345','उदाहरण नाम','पति का नाम',24,'G2P1','गाँव का नाम','Girwa','उप-केंद्र नाम','PHC/CHC नाम','आशा नाम','9999999999','एएनएम नाम','2026-01-15','2026-10-20','yellow','गंभीर रक्ताल्पता (Hb<7) Severe Anemia; PIH / Pre-eclampsia / Eclampsia','टिप्पणी यहाँ लिखें','2026-09-20'];
-  const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'HRP Cases');
-  XLSX.writeFile(wb, 'HRP_Case_Bulk_Upload_Template.xlsx');
+  const sample = ['123456789012345','उदाहरण नाम','पति का नाम',24,'G2P1','गाँव का नाम','Girwa','उप-केंद्र नाम','PHC/CHC नाम','आशा नाम','9999999999','एएनएम नाम','2026-01-15','2026-10-20','yellow','गंभीर एनीमिया- <7Hb; मलेरिया','टिप्पणी यहाँ लिखें','2026-09-20'];
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('HRP Cases');
+  ws.addRow(headers);
+  ws.addRow(sample);
+  ws.columns.forEach(col=>{ col.width = 22; });
+
+  // छुपी हुई संदर्भ शीट — जोखिम श्रेणियों की सूची, ड्रॉपडाउन हेतु
+  const listWs = wb.addWorksheet('जोखिम श्रेणी सूची');
+  RISK_CATEGORIES.forEach((cat,i)=>{ listWs.getCell(i+1, 1).value = cat; });
+  listWs.state = 'hidden';
+
+  // RiskCategories कॉलम (P) में ड्रॉपडाउन लिस्ट — फॉर्मेट/कॉलम संरचना पूर्ववत रहती है,
+  // केवल चयन आसान व त्रुटि-रहित बनाने हेतु सूची जोड़ी गई है।
+  // (warning शैली — एक से अधिक श्रेणी हेतु सूची में से एक चुनकर बाद में अर्धविराम ';' से अन्य श्रेणी जोड़ी जा सकती है)
+  const catColIndex = headers.indexOf('RiskCategories') + 1; // 1-based
+  for(let r=2;r<=1000;r++){
+    ws.getCell(r, catColIndex).dataValidation = {
+      type: 'list',
+      allowBlank: true,
+      formulae: [`'जोखिम श्रेणी सूची'!$A$1:$A$${RISK_CATEGORIES.length}`],
+      showErrorMessage: true,
+      errorStyle: 'warning',
+      errorTitle: 'जोखिम श्रेणी',
+      error: 'कृपया सूची में से चुनें। एक से अधिक श्रेणी हेतु सूची में से एक चुनें, फिर सेल में उसके बाद अर्धविराम ( ; ) लगाकर अगली श्रेणी का नाम भी टाइप करें।'
+    };
+  }
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'HRP_Case_Bulk_Upload_Template.xlsx';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 async function bulkUploadCases(){
   const fileInput = document.getElementById('bulkCaseFile');
@@ -1290,7 +1367,7 @@ async function deleteUser(uid){
 /* ================= EXPORT ================= */
 function exportCSV(){
   const headers = ['PCTS ID','Name','Age','Village','Block','Subcentre','Facility','ASHA','ANM','LMP','EDD','RiskLevel','RiskCategories','Status','LastContact','NextDue','RegisteredBy','RegisteredDate'];
-  const rows = allCases.map(c=>[c.pctsId,c.name,c.age,c.village,c.block,c.subcenter,c.facility,c.ashaName,c.anmName,c.lmp,c.edd,c.riskLevel,(c.riskCategories||[]).join('; '),c.status,c.lastContactDate,c.nextDueDate,c.registeredByName,c.registeredDate]);
+  const rows = anyServiceCases.map(c=>[c.pctsId,c.name,c.age,c.village,c.block,c.subcenter,c.facility,c.ashaName,c.anmName,c.lmp,c.edd,c.riskLevel,(c.riskCategories||[]).join('; '),c.status,c.lastContactDate,c.nextDueDate,c.registeredByName,c.registeredDate]);
   const csv = [headers.join(',')].concat(rows.map(r=>r.map(v=>`"${(v??'').toString().replace(/"/g,'""')}"`).join(','))).join('\n');
   const blob = new Blob(["\ufeff"+csv], {type:'text/csv;charset=utf-8;'});
   const link = document.createElement('a');
