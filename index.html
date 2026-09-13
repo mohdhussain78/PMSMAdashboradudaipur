@@ -187,6 +187,7 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
           <option value="active">सक्रिय (Active)</option>
           <option value="">सभी</option>
           <option value="delivered">प्रसव / प्रसव हो चुका</option>
+          <option value="maternal_death">मातृ मृत्यु</option>
           <option value="referred">रेफर किया गया</option>
           <option value="ltfu">संपर्क में नहीं (LTFU)</option>
           <option value="closed">बंद</option>
@@ -221,6 +222,8 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
         </div>
         <div class="filterbar">
           <div class="field" style="margin:0;"><label>तारीख़ चुनें</label><input type="date" id="dr_date"></div>
+          <div class="field" style="margin:0;"><label>ब्लॉक</label><select id="dr_block" onchange="onDrBlockChange()"><option value="">सभी ब्लॉक</option></select></div>
+          <div class="field" style="margin:0;"><label>सुविधा (Facility)</label><select id="dr_facility" onchange="runDailyServiceReport()"><option value="">सभी सुविधाएं</option></select></div>
           <button class="btn small" style="align-self:flex-end;" onclick="runDailyServiceReport()">रिपोर्ट देखें</button>
           <button class="btn small ghost" style="align-self:flex-end;" onclick="exportDailyReportCSV()">Excel निर्यात</button>
         </div>
@@ -234,7 +237,7 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
       <div class="panel">
         <h3>नया HRP केस पंजीकरण / Register New HRP Case</h3>
         <div class="grid2">
-          <div class="field"><label>PCTS ID (15 अंक) *</label><input id="r_pcts" maxlength="15" inputmode="numeric" placeholder="15 अंकों की RCH/PCTS ID"></div>
+          <div class="field"><label>PCTS ID (14-16 अंक) *</label><input id="r_pcts" maxlength="16" inputmode="numeric" placeholder="14 से 16 अंकों की RCH/PCTS ID"></div>
           <div class="field"><label>महिला का नाम *</label><input id="r_name"></div>
           <div class="field"><label>पति का नाम</label><input id="r_husband"></div>
           <div class="field"><label>आयु *</label><input id="r_age" type="number"></div>
@@ -267,7 +270,7 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
         <div class="small" style="margin-bottom:8px;">
           Excel में पहली पंक्ति में ये कॉलम हेडर बिल्कुल इसी नाम से रखें:<br>
           <b>PCTSID, Name, HusbandName, Age, GravidaParity, Village, Block, Subcenter, Facility, ASHAName, ASHAPhone, ANMName, LMP, EDD, RiskLevel, RiskCategories, Notes, NextDueDate</b><br>
-          · <b>PCTSID</b> ठीक 15 अंकों का होना चाहिए — जो PCTS ID पहले से दर्ज है वह पंक्ति स्वतः छोड़ दी जाएगी (डुप्लीकेट नहीं बनेगा)।<br>
+          · <b>PCTSID</b> 14 से 16 अंकों के बीच होना चाहिए — जो PCTS ID पहले से दर्ज है वह पंक्ति स्वतः छोड़ दी जाएगी (डुप्लीकेट नहीं बनेगा)।<br>
           · <b>RiskLevel</b> में red / yellow / green लिखें (खाली छोड़ने पर yellow माना जाएगा)।<br>
           · <b>RiskCategories</b> में एक से अधिक श्रेणी को अर्धविराम ( ; ) से अलग कर लिखें (सूची ऊपर "जोखिम श्रेणियाँ" में देखें)। डाउनलोड किए गए टेम्पलेट में इस कॉलम पर क्लिक करने पर सही स्पेलिंग हेतु एक ड्रॉप-डाउन सूची भी दिखेगी — प्रारूप/कॉलम संरचना में कोई बदलाव नहीं है, केवल चयन आसान बनाने हेतु सूची जोड़ी गई है।<br>
           · तिथियाँ (LMP, EDD, NextDueDate) <code>yyyy-mm-dd</code> या <code>dd/mm/yyyy</code> प्रारूप में लिखें।<br>
@@ -646,12 +649,14 @@ function renderDashboard(){
   const overdue = active.filter(isOverdue);
   const delivered = scoped.filter(c=>c.status==='delivered');
   const referred = scoped.filter(c=>c.status==='referred');
+  const maternalDeaths = scoped.filter(c=>c.status==='maternal_death');
   document.getElementById('statRow').innerHTML = `
     <div class="statcard maroon"><div class="num">${active.length}</div><div class="lbl">सक्रिय HRP केस</div></div>
     <div class="statcard red"><div class="num">${red.length}</div><div class="lbl">उच्च जोखिम (Red)</div></div>
     <div class="statcard amber"><div class="num">${overdue.length}</div><div class="lbl">अनुवर्ती लंबित</div></div>
     <div class="statcard blue"><div class="num">${referred.length}</div><div class="lbl">रेफर किए गए</div></div>
     <div class="statcard green"><div class="num">${delivered.length}</div><div class="lbl">प्रसव / प्रसव हो चुका</div></div>
+    <div class="statcard red"><div class="num">${maternalDeaths.length}</div><div class="lbl">मातृ मृत्यु</div></div>
   `;
   const list = overdue.sort((a,b)=> new Date(a.nextDueDate) - new Date(b.nextDueDate));
   document.getElementById('overdueList').innerHTML = list.length ? list.map(caseCardHTML).join('') :
@@ -676,6 +681,7 @@ function caseCardHTML(c){
   const statusBadge = {
     active: overdue ? `<span class="badge red">अनुवर्ती लंबित</span>` : dueSoon ? `<span class="badge amber">शीघ्र देय</span>` : `<span class="badge green">सामान्य</span>`,
     delivered: `<span class="badge blue">प्रसव / प्रसव हो चुका</span>`,
+    maternal_death: `<span class="badge red">मातृ मृत्यु</span>`,
     referred: `<span class="badge blue">रेफर किया गया</span>`,
     ltfu: `<span class="badge gray">संपर्क में नहीं</span>`,
     closed: `<span class="badge gray">बंद</span>`
@@ -759,8 +765,8 @@ async function registerCase(){
   const block = document.getElementById('r_block').value;
   const subcenter = document.getElementById('r_subcenter').value.trim();
   const facility = document.getElementById('r_facility').value.trim();
-  if(!/^\d{15}$/.test(pctsId)){
-    errEl.textContent = 'PCTS ID ठीक 15 अंकों की संख्या होनी चाहिए।'; return;
+  if(!/^\d{14,16}$/.test(pctsId)){
+    errEl.textContent = 'PCTS ID 14 से 16 अंकों के बीच की संख्या होनी चाहिए।'; return;
   }
   if(!name || !age || !village || !block || !subcenter || !facility){
     errEl.textContent = 'कृपया * चिह्नित सभी फ़ील्ड भरें।'; return;
@@ -867,7 +873,7 @@ async function bulkUploadCases(){
     const rowNum = i+2; // 1 = header row
     const pctsId = String(row.PCTSID||row.PctsId||row.pctsid||row['PCTS ID']||'').trim();
     const name = String(row.Name||row.name||'').trim();
-    if(!/^\d{15}$/.test(pctsId)){ failed.push(`पंक्ति ${rowNum} (${name||'—'}) — PCTS ID 15 अंकों का नहीं है`); continue; }
+    if(!/^\d{14,16}$/.test(pctsId)){ failed.push(`पंक्ति ${rowNum} (${name||'—'}) — PCTS ID 14 से 16 अंकों के बीच का नहीं है`); continue; }
     if(!name){ failed.push(`पंक्ति ${rowNum} — नाम खाली है`); continue; }
 
     let village = String(row.Village||row.village||'').trim();
@@ -1023,7 +1029,7 @@ async function openCase(id, silentRefresh){
     </div>
     <div class="badges" style="margin-top:8px;">
       ${ {red:'<span class="badge red">उच्च जोखिम</span>',yellow:'<span class="badge amber">मध्यम जोखिम</span>',green:'<span class="badge green">निम्न जोखिम</span>'}[c.riskLevel]||'' }
-      ${ {active:'<span class="badge green">सक्रिय</span>',delivered:'<span class="badge blue">प्रसव / प्रसव हो चुका</span>',referred:'<span class="badge blue">रेफर</span>',ltfu:'<span class="badge gray">संपर्क में नहीं</span>',closed:'<span class="badge gray">बंद</span>'}[c.status]||'' }
+      ${ {active:'<span class="badge green">सक्रिय</span>',delivered:'<span class="badge blue">प्रसव / प्रसव हो चुका</span>',maternal_death:'<span class="badge red">मातृ मृत्यु</span>',referred:'<span class="badge blue">रेफर</span>',ltfu:'<span class="badge gray">संपर्क में नहीं</span>',closed:'<span class="badge gray">बंद</span>'}[c.status]||'' }
     </div>
 
     <div id="viewDetailsBlock">
@@ -1043,7 +1049,7 @@ async function openCase(id, silentRefresh){
     <div id="editDetailsBlock" class="hidden">
       <div class="section-title">मूल विवरण संपादित करें / Edit Details</div>
       <div class="grid2">
-        <div class="field"><label>PCTS ID</label><input id="e_pcts" maxlength="15" value="${esc(c.pctsId||'')}"></div>
+        <div class="field"><label>PCTS ID</label><input id="e_pcts" maxlength="16" value="${esc(c.pctsId||'')}"></div>
         <div class="field"><label>महिला का नाम</label><input id="e_name" value="${esc(c.name||'')}"></div>
         <div class="field"><label>पति का नाम</label><input id="e_husband" value="${esc(c.husbandName||'')}"></div>
         <div class="field"><label>आयु</label><input id="e_age" type="number" value="${c.age||''}"></div>
@@ -1078,6 +1084,7 @@ async function openCase(id, silentRefresh){
         <select id="m_status">
           <option value="active" ${c.status==='active'?'selected':''}>सक्रिय</option>
           <option value="delivered" ${c.status==='delivered'?'selected':''}>प्रसव / प्रसव हो चुका</option>
+          <option value="maternal_death" ${c.status==='maternal_death'?'selected':''}>मातृ मृत्यु</option>
           <option value="referred" ${c.status==='referred'?'selected':''}>रेफर किया गया</option>
           <option value="ltfu" ${c.status==='ltfu'?'selected':''}>संपर्क में नहीं (LTFU)</option>
           <option value="closed" ${c.status==='closed'?'selected':''}>बंद</option>
@@ -1143,7 +1150,7 @@ async function openCase(id, silentRefresh){
 
     <div class="footRow"><button class="btn" onclick="addVisit('${id}')">प्रविष्टि जोड़ें</button></div>
 
-    ${(activeTab==='anyservice' && c.status==='delivered') ? deliveryHBNCBlockHTML(c, id) : ''}
+    ${(activeTab==='anyservice' && (c.status==='delivered' || c.status==='maternal_death')) ? deliveryHBNCBlockHTML(c, id) : ''}
 
     <div class="section-title">टाइमलाइन / History (${visits.length})</div>
     <div class="timeline">
@@ -1187,7 +1194,7 @@ async function deleteCase(id){
 async function saveCaseEdit(id){
   const errEl = document.getElementById('e_err'); errEl.textContent='';
   const pctsId = document.getElementById('e_pcts').value.trim();
-  if(!/^\d{15}$/.test(pctsId)){ errEl.textContent='PCTS ID ठीक 15 अंकों की संख्या होनी चाहिए।'; return; }
+  if(!/^\d{14,16}$/.test(pctsId)){ errEl.textContent='PCTS ID 14 से 16 अंकों के बीच की संख्या होनी चाहिए।'; return; }
   const dupSnap = await db.collection('hrp_cases').where('pctsId','==', pctsId).get();
   if(dupSnap.docs.some(d=>d.id!==id)){ errEl.textContent='यह PCTS ID किसी और केस में पहले से मौजूद है।'; return; }
   const payload = {
@@ -1441,18 +1448,38 @@ function esc(s){ return (s??'').toString().replace(/[&<>"']/g, m=>({'&':'&amp;',
 
 /* ================= DAILY SERVICE REPORT (facility/block/district) ================= */
 let lastDailyReportRows = [];
+function populateDailyReportFilters(){
+  const blockSel = document.getElementById('dr_block');
+  const curBlock = blockSel.value;
+  const blocks = Array.from(new Set(allCases.map(c=>c.block).filter(Boolean))).sort();
+  blockSel.innerHTML = '<option value="">सभी ब्लॉक</option>' + blocks.map(b=>`<option value="${esc(b)}" ${b===curBlock?'selected':''}>${esc(b)}</option>`).join('');
+}
+function onDrBlockChange(){
+  const block = document.getElementById('dr_block').value;
+  const facSel = document.getElementById('dr_facility');
+  const curFac = facSel.value;
+  const facilities = Array.from(new Set(allCases.filter(c=>!block || c.block===block).map(c=>c.facility).filter(Boolean))).sort();
+  facSel.innerHTML = '<option value="">सभी सुविधाएं</option>' + facilities.map(f=>`<option value="${esc(f)}" ${f===curFac?'selected':''}>${esc(f)}</option>`).join('');
+  if(!facilities.includes(curFac)) facSel.value = '';
+  runDailyServiceReport();
+}
 async function runDailyServiceReport(){
   const dateInput = document.getElementById('dr_date');
   if(!dateInput.value) dateInput.value = new Date().toISOString().slice(0,10);
   const date = dateInput.value;
+  populateDailyReportFilters();
+  const blockF = document.getElementById('dr_block').value;
+  const facF = document.getElementById('dr_facility').value;
   const summaryEl = document.getElementById('dr_summary');
   const tableEl = document.getElementById('dr_table');
   summaryEl.textContent = 'लोड हो रहा है...';
   tableEl.innerHTML = '';
 
   // allCases पहले से ही भूमिका अनुसार scoped है (facility→अपनी facility, block→अपना block, district/admin→पूरा ज़िला)
-  const scopedIds = new Set(allCases.map(c=>c.id));
-  const caseById = {}; allCases.forEach(c=> caseById[c.id]=c);
+  // यहाँ ऊपर से ब्लॉक/सुविधा फ़िल्टर अतिरिक्त रूप से लगाया गया है
+  const scopedCases = allCases.filter(c => (!blockF || c.block===blockF) && (!facF || c.facility===facF));
+  const scopedIds = new Set(scopedCases.map(c=>c.id));
+  const caseById = {}; scopedCases.forEach(c=> caseById[c.id]=c);
 
   let visitsSnap;
   try{
@@ -1475,7 +1502,8 @@ async function runDailyServiceReport(){
   rows.sort((a,b)=> (a.c.block||'').localeCompare(b.c.block||'') || (a.c.name||'').localeCompare(b.c.name||''));
   lastDailyReportRows = rows;
 
-  const scopeLabel = {facility:'सुविधा: '+currentUser.facilityName, block:'ब्लॉक: '+currentUser.blockName, district:'संपूर्ण ज़िला', admin:'संपूर्ण ज़िला'}[currentUser.role] || '';
+  let scopeLabel = {facility:'सुविधा: '+currentUser.facilityName, block:'ब्लॉक: '+currentUser.blockName, district:'संपूर्ण ज़िला', admin:'संपूर्ण ज़िला'}[currentUser.role] || '';
+  if(blockF || facF) scopeLabel = [blockF?('ब्लॉक: '+blockF):'', facF?('सुविधा: '+facF):''].filter(Boolean).join(' · ');
   summaryEl.textContent = `दिनांक ${date} को सेवा प्राप्त करने वाली कुल HRP: ${rows.length}  (${scopeLabel})`;
 
   if(!rows.length){ tableEl.innerHTML = '<tbody><tr><td>इस तारीख़ को इस क्षेत्र में किसी HRP को कोई सेवा दर्ज नहीं हुई।</td></tr></tbody>'; return; }
