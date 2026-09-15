@@ -118,6 +118,31 @@ main{padding:18px 20px 60px;max-width:1200px;margin:0 auto;}
 .footRow{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
 textarea{min-height:56px;resize:vertical;}
 .small{font-size:11.5px;color:#8a7a7a;}
+
+/* ---- HRP जोखिम फ्लैग ---- */
+.flaggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;}
+.flagitem{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-left:5px solid var(--red);
+  border-radius:9px;padding:9px 11px;font-size:12.5px;background:var(--red-light);color:#7a2020;
+  cursor:pointer;transition:box-shadow .15s;line-height:1.3;}
+.flagitem:hover{box-shadow:0 3px 10px rgba(0,0,0,.09);}
+.flagitem.zero{background:#fff;border-left-color:#DED5CD;color:#9a8e8e;}
+.flagitem.sel{outline:2px solid var(--maroon);outline-offset:1px;}
+.flagitem .fico{font-size:14px;line-height:1;}
+.flagitem .fcnt{margin-inline-start:auto;font-family:'Roboto Mono',monospace;font-weight:700;font-size:16px;color:var(--red);}
+.flagitem.zero .fcnt{color:#b6aaa6;}
+.caseflags{margin-top:7px;display:flex;gap:5px;flex-wrap:wrap;}
+.miniflag{display:inline-flex;align-items:center;gap:3px;background:var(--red-light);color:#7a2020;
+  border:1px solid #EBCFCB;border-radius:5px;padding:2px 6px;font-size:10.5px;font-weight:600;}
+
+/* ---- बल्क चयन / हटाना (Admin) ---- */
+.adminbar{background:#FFF6F5;border:1px dashed var(--red);border-radius:10px;padding:10px 12px;margin-bottom:12px;}
+.adminbar .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.btn.danger{background:#B00020;}
+.btn.danger:hover{background:#8A0019;}
+.btn.danger.ghost{background:#fff;color:#B00020;border:1px solid #B00020;}
+.casecard.picked{background:#FFF3F1;border-color:var(--red);box-shadow:inset 0 0 0 1px var(--red);}
+.casecard .pickbox{width:16px;height:16px;vertical-align:middle;margin-inline-end:6px;cursor:pointer;}
+
 table.linelist{width:100%;border-collapse:collapse;font-size:12.5px;}
 table.linelist th,table.linelist td{border:1px solid var(--line);padding:6px 8px;text-align:left;}
 table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);position:sticky;top:0;}
@@ -164,8 +189,15 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
       </div>
       <div class="statrow" id="statRow"></div>
       <div class="panel">
-        <h3>श्रेणी अनुसार सक्रिय HRP / Active HRP by Risk Category (आपके क्षेत्र में)</h3>
-        <div id="categoryStats" class="small"></div>
+        <h3>🚩 HRP जोखिम फ्लैग / HRP Risk Flags (आपके क्षेत्र के सक्रिय केस)</h3>
+        <div class="small" style="margin-bottom:10px;">
+          सभी पंजीकृत HRP <b>उच्च जोखिम</b> माने जाते हैं। नीचे प्रत्येक जोखिम श्रेणी एक फ्लैग के रूप में दिखाई गई है —
+          किसी भी फ्लैग पर क्लिक कर उस श्रेणी के सभी केस "HRP सूची" में देखें।
+        </div>
+        <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+          <label class="small"><input type="checkbox" id="db_showZeroFlags" onchange="renderDashboard()" style="width:auto;vertical-align:middle;"> शून्य संख्या वाले फ्लैग भी दिखाएँ</label>
+        </div>
+        <div id="categoryStats" class="flaggrid"></div>
       </div>
       <div class="panel">
         <h3>⚠ अनुवर्ती लंबित / Overdue Follow-up</h3>
@@ -175,13 +207,41 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
 
     <!-- MY LIST -->
     <section id="tab-list" class="hidden">
+      <div class="small" style="margin-bottom:10px;">
+        🚩 <b>सभी पंजीकृत HRP उच्च जोखिम (High Risk) माने जाते हैं।</b> नीचे प्रत्येक केस पर उसकी जोखिम श्रेणियाँ फ्लैग के रूप में दिखती हैं।
+      </div>
+      <div class="adminbar hidden" id="listAdminBar">
+        <div class="row">
+          <b style="font-size:13px;color:#B00020;">Admin: बल्क HRP हटाना</b>
+          <button class="btn small danger ghost" id="selModeBtn" onclick="toggleSelectMode()">☑ चयन मोड चालू करें</button>
+          <button class="btn small ghost" onclick="selectAllFiltered()">सभी दिख रहे केस चुनें</button>
+          <button class="btn small ghost" onclick="clearSelection()">चयन हटाएं</button>
+          <button class="btn small danger" onclick="bulkDeleteSelected()">🗑 चयनित हटाएं (<span id="selCount">0</span>)</button>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <input class="grow" id="bd_pcts" placeholder="PCTS ID सूची — अल्पविराम, स्पेस या नई पंक्ति से अलग कर पेस्ट करें">
+          <button class="btn small danger ghost" onclick="bulkDeleteByPcts()">इन PCTS ID वाले केस हटाएं</button>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <select id="bd_block"><option value="">— ब्लॉक चुनें —</option></select>
+          <select id="bd_facility"><option value="">सभी सुविधाएं</option></select>
+          <select id="bd_status">
+            <option value="">सभी स्थिति</option>
+            <option value="active">सक्रिय</option>
+            <option value="delivered">प्रसव हो चुका</option>
+            <option value="referred">रेफर</option>
+            <option value="ltfu">संपर्क में नहीं</option>
+            <option value="closed">बंद</option>
+          </select>
+          <button class="btn small danger ghost" onclick="bulkDeleteByScope()">इस क्षेत्र के सभी केस हटाएं</button>
+        </div>
+        <div class="small" style="margin-top:6px;">हटाया गया केस व उसकी सभी फॉलो-अप/सेवा प्रविष्टियाँ स्थायी रूप से मिट जाती हैं — यह वापस नहीं लिया जा सकता।</div>
+        <div class="small" id="bd_progress" style="margin-top:6px;white-space:pre-line;font-weight:600;"></div>
+      </div>
       <div class="filterbar">
         <input class="grow" id="f_search" placeholder="नाम / गाँव / PCTS ID से खोजें..." oninput="renderCaseList()">
-        <select id="f_risk" onchange="renderCaseList()">
-          <option value="">सभी जोखिम स्तर</option>
-          <option value="red">उच्च जोखिम (Red)</option>
-          <option value="yellow">मध्यम जोखिम (Yellow)</option>
-          <option value="green">निम्न जोखिम (Green)</option>
+        <select id="f_flag" onchange="renderCaseList()">
+          <option value="">सभी जोखिम फ्लैग (श्रेणियाँ)</option>
         </select>
         <select id="f_status" onchange="renderCaseList()">
           <option value="active">सक्रिय (Active)</option>
@@ -237,7 +297,7 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
       <div class="panel">
         <h3>नया HRP केस पंजीकरण / Register New HRP Case</h3>
         <div class="grid2">
-          <div class="field"><label>PCTS ID (14-16 अंक) *</label><input id="r_pcts" maxlength="16" inputmode="numeric" placeholder="14 से 16 अंकों की RCH/PCTS ID"></div>
+          <div class="field"><label>PCTS ID *</label><input id="r_pcts" inputmode="numeric" placeholder="RCH/PCTS ID (कितने भी अंकों की हो सकती है)"></div>
           <div class="field"><label>महिला का नाम *</label><input id="r_name"></div>
           <div class="field"><label>पति का नाम</label><input id="r_husband"></div>
           <div class="field"><label>आयु *</label><input id="r_age" type="number"></div>
@@ -252,12 +312,13 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
           <div class="field"><label>LMP</label><input id="r_lmp" type="date"></div>
           <div class="field"><label>EDD (संभावित प्रसव तिथि)</label><input id="r_edd" type="date"></div>
         </div>
-        <div class="section-title">जोखिम श्रेणियाँ (एक या अधिक चुनें) / Risk Categories</div>
+        <div class="section-title">जोखिम श्रेणियाँ / HRP फ्लैग (एक या अधिक चुनें) / Risk Categories</div>
         <div class="chipset" id="riskChips"></div>
         <div class="field" style="margin-top:10px;"><label>अन्य विवरण / Clinical Notes</label><textarea id="r_notes"></textarea></div>
         <div class="grid2" style="margin-top:6px;">
-          <div class="field"><label>जोखिम स्तर / Risk Level *</label>
-            <select id="r_level"><option value="red" selected>उच्च (Red)</option><option value="yellow">मध्यम (Yellow)</option><option value="green">निम्न (Green)</option></select>
+          <div class="field"><label>जोखिम स्तर / Risk Level</label>
+            <div class="badge red" style="display:inline-block;padding:7px 12px;font-size:13px;">🚩 उच्च जोखिम (High Risk) — सभी HRP हेतु निर्धारित</div>
+            <div class="small" style="margin-top:4px;">प्रत्येक पंजीकृत HRP स्वतः उच्च जोखिम माना जाता है — इसे बदलने की आवश्यकता नहीं।</div>
           </div>
           <div class="field"><label>अगली अनुवर्ती तिथि / Next Follow-up Due</label><input id="r_nextdue" type="date"></div>
         </div>
@@ -270,8 +331,8 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
         <div class="small" style="margin-bottom:8px;">
           Excel में पहली पंक्ति में ये कॉलम हेडर बिल्कुल इसी नाम से रखें:<br>
           <b>PCTSID, Name, HusbandName, Age, GravidaParity, Village, Block, Subcenter, Facility, ASHAName, ASHAPhone, ANMName, LMP, EDD, RiskLevel, RiskCategories, Notes, NextDueDate</b><br>
-          · <b>PCTSID</b> 14 से 16 अंकों के बीच होना चाहिए — जो PCTS ID पहले से दर्ज है वह पंक्ति स्वतः छोड़ दी जाएगी (डुप्लीकेट नहीं बनेगा)।<br>
-          · <b>RiskLevel</b> में red / yellow / green लिखें (खाली छोड़ने पर yellow माना जाएगा)।<br>
+          · <b>PCTSID</b> की अंक-संख्या पर अब कोई सीमा नहीं है — कितने भी अंकों की PCTS ID चलेगी, बस खाली न हो। जो PCTS ID पहले से दर्ज है वह पंक्ति स्वतः छोड़ दी जाएगी (डुप्लीकेट नहीं बनेगा)।<br>
+          · <b>RiskLevel</b> कॉलम अब वैकल्पिक है — <b>सभी HRP स्वतः उच्च जोखिम (Red)</b> दर्ज होते हैं, इस कॉलम में कुछ भी लिखा हो तो भी।<br>
           · <b>RiskCategories</b> में एक से अधिक श्रेणी को अर्धविराम ( ; ) से अलग कर लिखें (सूची ऊपर "जोखिम श्रेणियाँ" में देखें)। डाउनलोड किए गए टेम्पलेट में इस कॉलम पर क्लिक करने पर सही स्पेलिंग हेतु एक ड्रॉप-डाउन सूची भी दिखेगी — प्रारूप/कॉलम संरचना में कोई बदलाव नहीं है, केवल चयन आसान बनाने हेतु सूची जोड़ी गई है।<br>
           · तिथियाँ (LMP, EDD, NextDueDate) <code>yyyy-mm-dd</code> या <code>dd/mm/yyyy</code> प्रारूप में लिखें।<br>
           · अपलोड के बाद सभी केस तुरंत (real-time) डैशबोर्ड व HRP सूची में — हर उपयोगकर्ता को उसकी भूमिका/अधिकार के अनुसार — दिखने लगेंगे, और कोई भी अधिकृत उपयोगकर्ता उनमें फ़ॉलो-अप सेवा प्रविष्टि जोड़ सकेगा।
@@ -345,6 +406,20 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
         <h3>उपयोगकर्ता सूची</h3>
         <div class="tablewrap"><table class="linelist" id="userTable"></table></div>
       </div>
+
+      <div class="panel" style="border-color:#B00020;">
+        <h3 style="color:#B00020;">🛠 Admin उपकरण / Admin Tools</h3>
+        <div class="small" style="margin-bottom:10px;">
+          <b>बल्क HRP हटाना</b> — "HRP सूची" टैब के सबसे ऊपर लाल पट्टी में उपलब्ध है। वहाँ तीन तरीक़े हैं:
+          (1) चयन मोड से केस चुनकर, (2) PCTS ID की सूची पेस्ट कर, (3) ब्लॉक/सुविधा/स्थिति के अनुसार पूरे क्षेत्र के केस।
+        </div>
+        <div class="small" style="margin-bottom:8px;">
+          <b>पुराने रिकॉर्ड सुधारें</b> — पहले जो केस मध्यम/निम्न जोखिम के रूप में दर्ज हुए थे, उन्हें नई नीति
+          (सभी HRP = उच्च जोखिम) के अनुसार डेटाबेस में भी उच्च जोखिम कर दें। डैशबोर्ड/सूची पर यह पहले से ही उच्च जोखिम दिखते हैं।
+        </div>
+        <button class="btn small ghost" onclick="normalizeAllToHighRisk()">सभी पुराने केस को उच्च जोखिम करें</button>
+        <div class="small" id="normProgress" style="margin-top:8px;white-space:pre-line;font-weight:600;"></div>
+      </div>
     </section>
   </main>
 </div>
@@ -415,6 +490,28 @@ const RISK_CATEGORIES = [
   "एक्लेम्पसिया (गर्भावस्था में दौरे/मिर्गी)",
   "अन्य"
 ];
+
+/* ================= नीति: सभी HRP उच्च जोखिम =================
+   इस सिस्टम में पंजीकृत प्रत्येक HRP को उच्च जोखिम (red) माना जाता है।
+   जोखिम श्रेणियाँ (RISK_CATEGORIES) अब "फ्लैग" के रूप में दिखाई जाती हैं। */
+const RISK_LEVEL_FIXED = 'red';
+function riskOf(){ return RISK_LEVEL_FIXED; }
+const HIGH_RISK_BADGE = '<span class="badge red">🚩 उच्च जोखिम</span>';
+
+/* PCTS ID — अंक-संख्या की कोई सीमा नहीं, केवल खाली नहीं होनी चाहिए */
+function normPcts(v){ return String(v==null?'':v).replace(/\s+/g,'').trim(); }
+function isValidPcts(v){ return normPcts(v).length > 0; }
+const PCTS_ERR = 'PCTS ID खाली नहीं हो सकती। (अंकों की संख्या पर कोई सीमा नहीं है।)';
+
+/* किसी केस के जोखिम फ्लैग — कार्ड पर दिखाने हेतु */
+function caseFlagsHTML(c, limit){
+  const cats = (c.riskCategories||[]).filter(Boolean);
+  if(!cats.length) return '';
+  const max = limit || 3;
+  const shown = cats.slice(0, max).map(x=>`<span class="miniflag">🚩 ${esc(x)}</span>`).join('');
+  const more = cats.length > max ? `<span class="miniflag" style="background:#F1EAE6;border-color:#E0D5CE;color:#7a6c6c;">+${cats.length-max} और</span>` : '';
+  return `<div class="caseflags">${shown}${more}</div>`;
+}
 
 const PLATFORM_OPTIONS = [
   "MCHN दिवस (सामुदायिक)","PMSMA (सुविधा ANC दिवस)","नियमित ANC (सुविधा)","गृह भ्रमण (ASHA/ANM)",
@@ -567,6 +664,8 @@ function enterApp(){
   if(currentUser.role==='admin') listenUsers();
   const frBtn = document.getElementById('fullReportBtn');
   if(frBtn) frBtn.style.display = currentUser.role==='admin' ? 'inline-block' : 'none';
+  selectMode = false; selectedCaseIds.clear();
+  initAdminBulkUI();
 }
 function switchTab(name){
   activeTab = name;
@@ -645,14 +744,14 @@ function renderDashboard(){
   const scoped = allCases.filter(c => (!blockF || c.block===blockF) && (!facF || c.facility===facF));
 
   const active = scoped.filter(c=>c.status==='active');
-  const red = active.filter(c=>c.riskLevel==='red');
+  const red = active; // नीति: सभी सक्रिय HRP उच्च जोखिम माने जाते हैं
   const overdue = active.filter(isOverdue);
   const delivered = scoped.filter(c=>c.status==='delivered');
   const referred = scoped.filter(c=>c.status==='referred');
   const maternalDeaths = scoped.filter(c=>c.status==='maternal_death');
   document.getElementById('statRow').innerHTML = `
     <div class="statcard maroon"><div class="num">${active.length}</div><div class="lbl">सक्रिय HRP केस</div></div>
-    <div class="statcard red"><div class="num">${red.length}</div><div class="lbl">उच्च जोखिम (Red)</div></div>
+    <div class="statcard red"><div class="num">${red.length}</div><div class="lbl">🚩 उच्च जोखिम (सभी HRP)</div></div>
     <div class="statcard amber"><div class="num">${overdue.length}</div><div class="lbl">अनुवर्ती लंबित</div></div>
     <div class="statcard blue"><div class="num">${referred.length}</div><div class="lbl">रेफर किए गए</div></div>
     <div class="statcard green"><div class="num">${delivered.length}</div><div class="lbl">प्रसव / प्रसव हो चुका</div></div>
@@ -662,17 +761,45 @@ function renderDashboard(){
   document.getElementById('overdueList').innerHTML = list.length ? list.map(caseCardHTML).join('') :
     `<div class="emptynote">कोई अनुवर्ती लंबित नहीं है।</div>`;
 
-  // श्रेणी अनुसार वितरण — केवल उपयोगकर्ता के अपने क्षेत्र के सक्रिय HRP केस (allCases पहले से ही भूमिका अनुसार scoped है)
+  // जोखिम फ्लैग — सभी HRP श्रेणियाँ फ्लैग के रूप में (allCases पहले से ही भूमिका अनुसार scoped है)
   const catCounts = {};
   RISK_CATEGORIES.forEach(cat=>{ catCounts[cat] = 0; });
-  active.forEach(c=>{ (c.riskCategories||[]).forEach(cat=>{ if(catCounts[cat]!==undefined) catCounts[cat]++; }); });
-  const catEntries = Object.entries(catCounts).filter(([,n])=>n>0).sort((a,b)=>b[1]-a[1]);
+  let uncategorised = 0;
+  active.forEach(c=>{
+    const cats = (c.riskCategories||[]).filter(Boolean);
+    if(!cats.length) uncategorised++;
+    cats.forEach(cat=>{ if(catCounts[cat]!==undefined) catCounts[cat]++; });
+  });
+  const showZero = document.getElementById('db_showZeroFlags')?.checked;
+  const entries = RISK_CATEGORIES.map(cat=>[cat, catCounts[cat]])
+    .filter(([,n])=> showZero || n>0)
+    .sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0],'hi'));
   const catEl = document.getElementById('categoryStats');
   if(catEl){
-    catEl.innerHTML = catEntries.length
-      ? `<div class="grid2">${catEntries.map(([cat,n])=>`<div>${esc(cat)}: <b>${n}</b></div>`).join('')}</div>`
-      : `<div class="emptynote">अभी कोई श्रेणी दर्ज नहीं है।</div>`;
+    if(!entries.length && !uncategorised){
+      catEl.innerHTML = `<div class="emptynote">अभी किसी सक्रिय केस पर कोई जोखिम फ्लैग दर्ज नहीं है।</div>`;
+    }else{
+      const flags = entries.map(([cat,n])=>
+        `<div class="flagitem ${n?'':'zero'}" title="इस फ्लैग के केस देखें" data-cat="${esc(cat)}" onclick="openFlagInList(this.dataset.cat)">
+           <span class="fico">🚩</span><span>${esc(cat)}</span><span class="fcnt">${n}</span>
+         </div>`).join('');
+      const noFlag = uncategorised
+        ? `<div class="flagitem zero" title="जिन केसों पर अभी कोई श्रेणी दर्ज नहीं है" onclick="switchTab('list')">
+             <span class="fico">⚪</span><span>कोई फ्लैग दर्ज नहीं</span><span class="fcnt">${uncategorised}</span>
+           </div>` : '';
+      catEl.innerHTML = flags + noFlag;
+    }
   }
+}
+/* डैशबोर्ड के फ्लैग पर क्लिक → उसी श्रेणी के केस "HRP सूची" टैब में */
+function openFlagInList(cat){
+  switchTab('list');
+  const sel = document.getElementById('f_flag');
+  if(sel){ sel.value = cat; }
+  const st = document.getElementById('f_status');
+  if(st) st.value = 'active';
+  renderCaseList();
+  window.scrollTo({top:0, behavior:'smooth'});
 }
 
 /* ================= CASE LIST ================= */
@@ -686,13 +813,20 @@ function caseCardHTML(c){
     ltfu: `<span class="badge gray">संपर्क में नहीं</span>`,
     closed: `<span class="badge gray">बंद</span>`
   }[c.status] || '';
-  const riskBadge = {red:'<span class="badge red">उच्च जोखिम</span>', yellow:'<span class="badge amber">मध्यम जोखिम</span>', green:'<span class="badge green">निम्न जोखिम</span>'}[c.riskLevel]||'';
-  return `<div class="casecard risk-${c.riskLevel}" onclick="openCase('${c.id}')">
-    <div class="nm">${esc(c.name)} <span class="small">(${c.age||'-'})</span></div>
+  const riskBadge = HIGH_RISK_BADGE; // सभी HRP उच्च जोखिम
+  const pickable = selectMode && activeTab==='list' && currentUser && currentUser.role==='admin';
+  const picked = selectedCaseIds.has(c.id);
+  const pickBox = pickable
+    ? `<input type="checkbox" class="pickbox" ${picked?'checked':''} onclick="event.stopPropagation();toggleCaseSelect('${c.id}')">`
+    : '';
+  const onClick = pickable ? `toggleCaseSelect('${c.id}')` : `openCase('${c.id}')`;
+  return `<div class="casecard risk-red ${picked?'picked':''}" onclick="${onClick}">
+    <div class="nm">${pickBox}${esc(c.name)} <span class="small">(${c.age||'-'})</span></div>
     <div class="small" style="font-family:'Roboto Mono',monospace;color:#8a7a7a;">PCTS: ${esc(c.pctsId||'—')}</div>
     <div class="meta">${esc(c.village||'')} · ${esc(c.block||'')} · ${esc(c.facility||'')}</div>
     <div class="meta">EDD: ${c.edd||'—'} · अगली देय: ${c.nextDueDate||'—'}</div>
     <div class="badges">${riskBadge}${statusBadge}</div>
+    ${caseFlagsHTML(c)}
   </div>`;
 }
 function renderCaseList(){
@@ -700,21 +834,163 @@ function renderCaseList(){
   // ताकि उपयोगकर्ता ज़रूरत पड़ने पर किसी भी HRP को यहीं से देख/खोज सके — जबकि डैशबोर्ड पर
   // आंकड़े (allCases) उपयोगकर्ता के अपने क्षेत्र तक ही सीमित रहते हैं।
   const search = (document.getElementById('f_search')?.value||'').toLowerCase();
-  const riskF = document.getElementById('f_risk')?.value;
+  const flagF = document.getElementById('f_flag')?.value || '';
   const statusF = document.getElementById('f_status')?.value;
   let list = anyServiceCases.filter(c=>{
-    if(riskF && c.riskLevel!==riskF) return false;
+    if(flagF && !(c.riskCategories||[]).includes(flagF)) return false;
     if(statusF && c.status!==statusF) return false;
-    if(!statusF && !riskF && document.getElementById('f_status') && document.getElementById('f_status').value==='active' && c.status!=='active') return false;
     if(search && !((c.name||'').toLowerCase().includes(search) || (c.village||'').toLowerCase().includes(search) || (c.pctsId||'').includes(search))) return false;
     return true;
   });
-  list.sort((a,b)=>{
-    const order = {red:0,yellow:1,green:2};
-    return (order[a.riskLevel]??3) - (order[b.riskLevel]??3);
-  });
+  // सभी केस उच्च जोखिम हैं — इसलिए फ्लैग की संख्या अधिक हो, वह ऊपर
+  list.sort((a,b)=> ((b.riskCategories||[]).length - (a.riskCategories||[]).length)
+                 || (a.name||'').localeCompare(b.name||'','hi'));
+  lastFilteredCases = list;
   const el = document.getElementById('caseList');
   if(el) el.innerHTML = list.length ? list.map(caseCardHTML).join('') : `<div class="emptynote">कोई केस नहीं मिला।</div>`;
+  updateSelCount();
+}
+
+/* ================= ADMIN: बल्क HRP हटाना ================= */
+let selectMode = false;
+let selectedCaseIds = new Set();
+let lastFilteredCases = [];
+
+function initAdminBulkUI(){
+  const bar = document.getElementById('listAdminBar');
+  if(!bar) return;
+  const isAdmin = currentUser && currentUser.role==='admin';
+  bar.classList.toggle('hidden', !isAdmin);
+  // जोखिम फ्लैग फ़िल्टर भरें
+  const fsel = document.getElementById('f_flag');
+  if(fsel && fsel.options.length<=1){
+    fsel.innerHTML = '<option value="">सभी जोखिम फ्लैग (श्रेणियाँ)</option>' +
+      RISK_CATEGORIES.map(c=>`<option value="${esc(c)}">🚩 ${esc(c)}</option>`).join('');
+  }
+  if(isAdmin){
+    const bsel = document.getElementById('bd_block');
+    if(bsel && bsel.options.length<=1){
+      bsel.innerHTML = '<option value="">— ब्लॉक चुनें —</option>' + BLOCKS.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
+      bsel.onchange = ()=>{
+        const blk = bsel.value;
+        const facs = Array.from(new Set(anyServiceCases.filter(c=>!blk || c.block===blk).map(c=>c.facility).filter(Boolean))).sort();
+        const fs = document.getElementById('bd_facility');
+        fs.innerHTML = '<option value="">सभी सुविधाएं</option>' + facs.map(f=>`<option value="${esc(f)}">${esc(f)}</option>`).join('');
+      };
+    }
+  }
+}
+function toggleSelectMode(){
+  selectMode = !selectMode;
+  if(!selectMode) selectedCaseIds.clear();
+  const btn = document.getElementById('selModeBtn');
+  if(btn) btn.textContent = selectMode ? '✖ चयन मोड बंद करें' : '☑ चयन मोड चालू करें';
+  renderCaseList();
+}
+function toggleCaseSelect(id){
+  if(selectedCaseIds.has(id)) selectedCaseIds.delete(id); else selectedCaseIds.add(id);
+  renderCaseList();
+}
+function selectAllFiltered(){
+  if(!selectMode) toggleSelectMode();
+  lastFilteredCases.forEach(c=>selectedCaseIds.add(c.id));
+  renderCaseList();
+}
+function clearSelection(){
+  selectedCaseIds.clear();
+  renderCaseList();
+}
+function updateSelCount(){
+  const el = document.getElementById('selCount');
+  if(el) el.textContent = selectedCaseIds.size;
+}
+/* केसों को उनकी सभी विज़िट सहित बैच में हटाना (Firestore batch सीमा 500 ops) */
+async function deleteCasesByIds(ids, progEl){
+  let deleted = 0, failed = 0;
+  for(let i=0;i<ids.length;i++){
+    const id = ids[i];
+    try{
+      const visitsSnap = await db.collection('hrp_visits').where('caseId','==', id).get();
+      const docs = visitsSnap.docs;
+      for(let s=0; s<docs.length; s+=400){
+        const batch = db.batch();
+        docs.slice(s, s+400).forEach(d=>batch.delete(d.ref));
+        await batch.commit();
+      }
+      await db.collection('hrp_cases').doc(id).delete();
+      deleted++;
+    }catch(e){ console.error('bulk delete error', id, e); failed++; }
+    if(progEl) progEl.textContent = `हटाया जा रहा है... ${i+1}/${ids.length} (सफल: ${deleted}, असफल: ${failed})`;
+  }
+  return {deleted, failed};
+}
+function confirmBulkDelete(n, extra){
+  if(!n){ alert('हटाने हेतु कोई केस नहीं चुना गया है।'); return false; }
+  if(!confirm(`⚠ चेतावनी\n\n${n} HRP केस${extra?' ('+extra+')':''} तथा उनकी सभी फॉलो-अप/सेवा प्रविष्टियाँ स्थायी रूप से हटा दी जाएँगी।\nयह कार्य वापस नहीं लिया जा सकता।\n\nक्या आप आगे बढ़ना चाहते हैं?`)) return false;
+  const typed = prompt(`पुष्टि हेतु नीचे ठीक ${n} लिखें (हटाए जाने वाले केसों की संख्या):`);
+  if(String(typed||'').trim() !== String(n)){ alert('संख्या मेल नहीं खाई — कुछ भी नहीं हटाया गया।'); return false; }
+  return true;
+}
+async function bulkDeleteSelected(){
+  if(currentUser.role!=='admin') return;
+  const ids = Array.from(selectedCaseIds);
+  if(!confirmBulkDelete(ids.length, 'चयनित')) return;
+  const progEl = document.getElementById('bd_progress');
+  const r = await deleteCasesByIds(ids, progEl);
+  selectedCaseIds.clear();
+  progEl.textContent = `पूर्ण: ${r.deleted} केस हटाए गए${r.failed?`, ${r.failed} असफल`:''}।`;
+  renderCaseList();
+}
+async function bulkDeleteByPcts(){
+  if(currentUser.role!=='admin') return;
+  const raw = document.getElementById('bd_pcts').value || '';
+  const wanted = raw.split(/[\s,;\n\r\t]+/).map(normPcts).filter(Boolean);
+  if(!wanted.length){ alert('कृपया कम से कम एक PCTS ID लिखें।'); return; }
+  const set = new Set(wanted);
+  const matched = anyServiceCases.filter(c=> set.has(normPcts(c.pctsId)));
+  const notFound = wanted.filter(w=> !anyServiceCases.some(c=>normPcts(c.pctsId)===w));
+  const progEl = document.getElementById('bd_progress');
+  if(!matched.length){ progEl.textContent = `दी गई ${wanted.length} PCTS ID में से कोई भी केस नहीं मिला।`; return; }
+  if(!confirmBulkDelete(matched.length, 'PCTS ID सूची से')) return;
+  const r = await deleteCasesByIds(matched.map(c=>c.id), progEl);
+  progEl.textContent = `पूर्ण: ${r.deleted} केस हटाए गए${r.failed?`, ${r.failed} असफल`:''}।` +
+    (notFound.length ? `\nनहीं मिली PCTS ID (${notFound.length}): ${notFound.join(', ')}` : '');
+  document.getElementById('bd_pcts').value = '';
+  renderCaseList();
+}
+/* पुराने रिकॉर्ड को नई नीति (सभी HRP उच्च जोखिम) के अनुसार डेटाबेस में भी सुधारना */
+async function normalizeAllToHighRisk(){
+  if(currentUser.role!=='admin') return;
+  const progEl = document.getElementById('normProgress');
+  const pending = anyServiceCases.filter(c=> c.riskLevel !== RISK_LEVEL_FIXED);
+  if(!pending.length){ progEl.textContent = 'सभी केस पहले से ही उच्च जोखिम के रूप में दर्ज हैं — कुछ बदलने की आवश्यकता नहीं।'; return; }
+  if(!confirm(`${pending.length} पुराने केस का जोखिम स्तर "उच्च जोखिम (red)" कर दिया जाएगा। जारी रखें?`)) return;
+  let done=0;
+  for(let i=0;i<pending.length;i+=400){
+    const batch = db.batch();
+    pending.slice(i,i+400).forEach(c=> batch.update(db.collection('hrp_cases').doc(c.id), {riskLevel: RISK_LEVEL_FIXED}));
+    try{ await batch.commit(); done += Math.min(400, pending.length-i); }
+    catch(e){ progEl.textContent = 'त्रुटि: '+e.message; return; }
+    progEl.textContent = `सुधारा जा रहा है... ${done}/${pending.length}`;
+  }
+  progEl.textContent = `पूर्ण: ${done} केस अब उच्च जोखिम के रूप में दर्ज हैं।`;
+}
+
+async function bulkDeleteByScope(){
+  if(currentUser.role!=='admin') return;
+  const blk = document.getElementById('bd_block').value;
+  const fac = document.getElementById('bd_facility').value;
+  const st  = document.getElementById('bd_status').value;
+  if(!blk && !fac && !st){ alert('सुरक्षा हेतु कम से कम एक फ़िल्टर (ब्लॉक / सुविधा / स्थिति) चुनना आवश्यक है।'); return; }
+  const matched = anyServiceCases.filter(c=>
+    (!blk || c.block===blk) && (!fac || c.facility===fac) && (!st || c.status===st));
+  const label = [blk&&('ब्लॉक: '+blk), fac&&('सुविधा: '+fac), st&&('स्थिति: '+st)].filter(Boolean).join(', ');
+  const progEl = document.getElementById('bd_progress');
+  if(!matched.length){ progEl.textContent = 'इस क्षेत्र में कोई केस नहीं मिला।'; return; }
+  if(!confirmBulkDelete(matched.length, label)) return;
+  const r = await deleteCasesByIds(matched.map(c=>c.id), progEl);
+  progEl.textContent = `पूर्ण: ${r.deleted} केस हटाए गए${r.failed?`, ${r.failed} असफल`:''}। (${label})`;
+  renderCaseList();
 }
 
 /* ================= SERVICE ENTRY AT ANY FACILITY (district-wide search) ================= */
@@ -758,16 +1034,14 @@ function renderAnyServiceList(){
 /* ================= REGISTER ================= */
 async function registerCase(){
   const errEl = document.getElementById('r_err'); errEl.textContent='';
-  const pctsId = document.getElementById('r_pcts').value.trim();
+  const pctsId = normPcts(document.getElementById('r_pcts').value);
   const name = document.getElementById('r_name').value.trim();
   const age = document.getElementById('r_age').value;
   const village = document.getElementById('r_village').value.trim();
   const block = document.getElementById('r_block').value;
   const subcenter = document.getElementById('r_subcenter').value.trim();
   const facility = document.getElementById('r_facility').value.trim();
-  if(!/^\d{14,16}$/.test(pctsId)){
-    errEl.textContent = 'PCTS ID 14 से 16 अंकों के बीच की संख्या होनी चाहिए।'; return;
-  }
+  if(!isValidPcts(pctsId)){ errEl.textContent = PCTS_ERR; return; }
   if(!name || !age || !village || !block || !subcenter || !facility){
     errEl.textContent = 'कृपया * चिह्नित सभी फ़ील्ड भरें।'; return;
   }
@@ -788,7 +1062,7 @@ async function registerCase(){
     anmName: document.getElementById('r_anm').value.trim(),
     lmp: document.getElementById('r_lmp').value, edd: document.getElementById('r_edd').value,
     riskCategories: cats, notes: document.getElementById('r_notes').value.trim(),
-    riskLevel: document.getElementById('r_level').value,
+    riskLevel: RISK_LEVEL_FIXED, // नीति: सभी HRP उच्च जोखिम
     nextDueDate: document.getElementById('r_nextdue').value,
     status:'active', district:'Udaipur',
     registeredBy: currentUser.id, registeredByName: currentUser.name, registeredByRole: currentUser.role,
@@ -799,8 +1073,7 @@ async function registerCase(){
     await db.collection('hrp_cases').add(doc);
     document.querySelectorAll('#tab-register input, #tab-register textarea').forEach(i=>{ if(!['r_village','r_subcenter','r_facility'].includes(i.id) || !['asha','anm','facility'].includes(currentUser.role)) i.value=''; });
     document.querySelectorAll('#riskChips .chip.on').forEach(c=>c.classList.remove('on'));
-    document.getElementById('r_level').value='red';
-    alert('HRP केस सफलतापूर्वक दर्ज किया गया।');
+    alert('HRP केस सफलतापूर्वक दर्ज किया गया (उच्च जोखिम के रूप में)।');
     switchTab('list');
   }catch(e){ errEl.textContent = 'त्रुटि: '+e.message; }
 }
@@ -818,7 +1091,7 @@ function toISODateStr(v){
 }
 async function downloadCaseTemplate(){
   const headers = ['PCTSID','Name','HusbandName','Age','GravidaParity','Village','Block','Subcenter','Facility','ASHAName','ASHAPhone','ANMName','LMP','EDD','RiskLevel','RiskCategories','Notes','NextDueDate'];
-  const sample = ['123456789012345','उदाहरण नाम','पति का नाम',24,'G2P1','गाँव का नाम','Girwa','उप-केंद्र नाम','PHC/CHC नाम','आशा नाम','9999999999','एएनएम नाम','2026-01-15','2026-10-20','yellow','गंभीर एनीमिया- <7Hb; मलेरिया','टिप्पणी यहाँ लिखें','2026-09-20'];
+  const sample = ['123456789012345','उदाहरण नाम','पति का नाम',24,'G2P1','गाँव का नाम','Girwa','उप-केंद्र नाम','PHC/CHC नाम','आशा नाम','9999999999','एएनएम नाम','2026-01-15','2026-10-20','red (सभी HRP उच्च जोखिम — यह कॉलम वैकल्पिक)','गंभीर एनीमिया- <7Hb; मलेरिया','टिप्पणी यहाँ लिखें','2026-09-20'];
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('HRP Cases');
@@ -871,9 +1144,9 @@ async function bulkUploadCases(){
   for(let i=0;i<rows.length;i++){
     const row = rows[i];
     const rowNum = i+2; // 1 = header row
-    const pctsId = String(row.PCTSID||row.PctsId||row.pctsid||row['PCTS ID']||'').trim();
+    const pctsId = normPcts(row.PCTSID||row.PctsId||row.pctsid||row['PCTS ID']||'');
     const name = String(row.Name||row.name||'').trim();
-    if(!/^\d{14,16}$/.test(pctsId)){ failed.push(`पंक्ति ${rowNum} (${name||'—'}) — PCTS ID 14 से 16 अंकों के बीच का नहीं है`); continue; }
+    if(!isValidPcts(pctsId)){ failed.push(`पंक्ति ${rowNum} (${name||'—'}) — PCTS ID खाली है`); continue; }
     if(!name){ failed.push(`पंक्ति ${rowNum} — नाम खाली है`); continue; }
 
     let village = String(row.Village||row.village||'').trim();
@@ -891,8 +1164,7 @@ async function bulkUploadCases(){
     try{
       const dupSnap = await db.collection('hrp_cases').where('pctsId','==', pctsId).limit(1).get();
       if(!dupSnap.empty){ skipped++; continue; }
-      const riskLevelRaw = String(row.RiskLevel||row.risklevel||'red').trim().toLowerCase();
-      const riskLevel = ['red','yellow','green'].includes(riskLevelRaw) ? riskLevelRaw : 'red';
+      const riskLevel = RISK_LEVEL_FIXED; // नीति: Excel में कुछ भी लिखा हो, सभी HRP उच्च जोखिम
       const catsRaw = String(row.RiskCategories||row.riskcategories||'').split(';').map(s=>s.trim()).filter(Boolean);
       const riskCategories = catsRaw.filter(c=>RISK_CATEGORIES.includes(c));
       const doc = {
@@ -1028,7 +1300,7 @@ async function openCase(id, silentRefresh){
       </div>
     </div>
     <div class="badges" style="margin-top:8px;">
-      ${ {red:'<span class="badge red">उच्च जोखिम</span>',yellow:'<span class="badge amber">मध्यम जोखिम</span>',green:'<span class="badge green">निम्न जोखिम</span>'}[c.riskLevel]||'' }
+      ${ HIGH_RISK_BADGE }
       ${ {active:'<span class="badge green">सक्रिय</span>',delivered:'<span class="badge blue">प्रसव / प्रसव हो चुका</span>',maternal_death:'<span class="badge red">मातृ मृत्यु</span>',referred:'<span class="badge blue">रेफर</span>',ltfu:'<span class="badge gray">संपर्क में नहीं</span>',closed:'<span class="badge gray">बंद</span>'}[c.status]||'' }
     </div>
 
@@ -1049,7 +1321,7 @@ async function openCase(id, silentRefresh){
     <div id="editDetailsBlock" class="hidden">
       <div class="section-title">मूल विवरण संपादित करें / Edit Details</div>
       <div class="grid2">
-        <div class="field"><label>PCTS ID</label><input id="e_pcts" maxlength="16" value="${esc(c.pctsId||'')}"></div>
+        <div class="field"><label>PCTS ID (कितने भी अंक)</label><input id="e_pcts" value="${esc(c.pctsId||'')}"></div>
         <div class="field"><label>महिला का नाम</label><input id="e_name" value="${esc(c.name||'')}"></div>
         <div class="field"><label>पति का नाम</label><input id="e_husband" value="${esc(c.husbandName||'')}"></div>
         <div class="field"><label>आयु</label><input id="e_age" type="number" value="${c.age||''}"></div>
@@ -1074,11 +1346,7 @@ async function openCase(id, silentRefresh){
     <div class="section-title">स्थिति अपडेट करें / Update Status</div>
     <div class="grid2">
       <div class="field"><label>जोखिम स्तर</label>
-        <select id="m_level">
-          <option value="red" ${c.riskLevel==='red'?'selected':''}>उच्च (Red)</option>
-          <option value="yellow" ${c.riskLevel==='yellow'?'selected':''}>मध्यम (Yellow)</option>
-          <option value="green" ${c.riskLevel==='green'?'selected':''}>निम्न (Green)</option>
-        </select>
+        <div class="badge red" style="display:inline-block;padding:7px 12px;font-size:13px;">🚩 उच्च जोखिम — सभी HRP हेतु निर्धारित</div>
       </div>
       <div class="field"><label>केस स्थिति</label>
         <select id="m_status">
@@ -1193,8 +1461,8 @@ async function deleteCase(id){
 }
 async function saveCaseEdit(id){
   const errEl = document.getElementById('e_err'); errEl.textContent='';
-  const pctsId = document.getElementById('e_pcts').value.trim();
-  if(!/^\d{14,16}$/.test(pctsId)){ errEl.textContent='PCTS ID 14 से 16 अंकों के बीच की संख्या होनी चाहिए।'; return; }
+  const pctsId = normPcts(document.getElementById('e_pcts').value);
+  if(!isValidPcts(pctsId)){ errEl.textContent = PCTS_ERR; return; }
   const dupSnap = await db.collection('hrp_cases').where('pctsId','==', pctsId).get();
   if(dupSnap.docs.some(d=>d.id!==id)){ errEl.textContent='यह PCTS ID किसी और केस में पहले से मौजूद है।'; return; }
   const payload = {
@@ -1210,6 +1478,7 @@ async function saveCaseEdit(id){
     anmName: document.getElementById('e_anm').value.trim(),
     lmp: document.getElementById('e_lmp').value, edd: document.getElementById('e_edd').value,
     notes: document.getElementById('e_notes').value.trim(),
+    riskLevel: RISK_LEVEL_FIXED,
     lastEditedBy: currentUser.name, lastEditedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
   try{
@@ -1219,10 +1488,9 @@ async function saveCaseEdit(id){
 }
 
 async function updateCaseStatus(id){
-  const level = document.getElementById('m_level').value;
   const status = document.getElementById('m_status').value;
   try{
-    await db.collection('hrp_cases').doc(id).update({riskLevel:level, status:status});
+    await db.collection('hrp_cases').doc(id).update({riskLevel: RISK_LEVEL_FIXED, status:status});
     openCase(id);
   }catch(e){
     console.error('updateCaseStatus error:', e);
@@ -1435,7 +1703,7 @@ async function deleteUser(uid){
 /* ================= EXPORT ================= */
 function exportCSV(){
   const headers = ['PCTS ID','Name','Age','Village','Block','Subcentre','Facility','ASHA','ANM','LMP','EDD','RiskLevel','RiskCategories','Status','LastContact','NextDue','RegisteredBy','RegisteredDate'];
-  const rows = anyServiceCases.map(c=>[c.pctsId,c.name,c.age,c.village,c.block,c.subcenter,c.facility,c.ashaName,c.anmName,c.lmp,c.edd,c.riskLevel,(c.riskCategories||[]).join('; '),c.status,c.lastContactDate,c.nextDueDate,c.registeredByName,c.registeredDate]);
+  const rows = anyServiceCases.map(c=>[c.pctsId,c.name,c.age,c.village,c.block,c.subcenter,c.facility,c.ashaName,c.anmName,c.lmp,c.edd,riskOf(c),(c.riskCategories||[]).join('; '),c.status,c.lastContactDate,c.nextDueDate,c.registeredByName,c.registeredDate]);
   const csv = [headers.join(',')].concat(rows.map(r=>r.map(v=>`"${(v??'').toString().replace(/"/g,'""')}"`).join(','))).join('\n');
   const blob = new Blob(["\ufeff"+csv], {type:'text/csv;charset=utf-8;'});
   const link = document.createElement('a');
@@ -1508,18 +1776,18 @@ async function runDailyServiceReport(){
 
   if(!rows.length){ tableEl.innerHTML = '<tbody><tr><td>इस तारीख़ को इस क्षेत्र में किसी HRP को कोई सेवा दर्ज नहीं हुई।</td></tr></tbody>'; return; }
 
-  const riskLabel = {red:'उच्च (Red)',yellow:'मध्यम (Yellow)',green:'निम्न (Green)'};
+  const riskLabel = {red:'उच्च (Red)'};
   tableEl.innerHTML = `<thead><tr><th>PCTS ID</th><th>नाम</th><th>गाँव</th><th>ब्लॉक</th><th>होम सुविधा</th><th>जोखिम स्तर</th><th>आज दी गई सेवा (प्लेटफ़ॉर्म)</th></tr></thead>
     <tbody>${rows.map(r=>`<tr onclick="openCase('${r.c.id}')" style="cursor:pointer;">
       <td>${esc(r.c.pctsId||'—')}</td><td>${esc(r.c.name)}</td><td>${esc(r.c.village||'-')}</td><td>${esc(r.c.block||'-')}</td>
-      <td>${esc(r.c.facility||'-')}</td><td>${riskLabel[r.c.riskLevel]||'-'}</td><td>${esc(Array.from(new Set(r.platforms)).join('; '))}</td>
+      <td>${esc(r.c.facility||'-')}</td><td>${riskLabel[riskOf(r.c)]}</td><td>${esc(Array.from(new Set(r.platforms)).join('; '))}</td>
     </tr>`).join('')}</tbody>`;
 }
 function exportDailyReportCSV(){
   if(!lastDailyReportRows.length){ alert('पहले रिपोर्ट देखें बटन दबाएं।'); return; }
   const date = document.getElementById('dr_date').value;
   const headers = ['Date','PCTS ID','Name','Village','Block','HomeFacility','RiskLevel','PlatformsServicedToday'];
-  const csvRows = lastDailyReportRows.map(r=>[date,r.c.pctsId,r.c.name,r.c.village,r.c.block,r.c.facility,r.c.riskLevel,Array.from(new Set(r.platforms)).join('; ')]);
+  const csvRows = lastDailyReportRows.map(r=>[date,r.c.pctsId,r.c.name,r.c.village,r.c.block,r.c.facility,riskOf(r.c),Array.from(new Set(r.platforms)).join('; ')]);
   const csv = [headers.join(',')].concat(csvRows.map(r=>r.map(v=>`"${(v??'').toString().replace(/"/g,'""')}"`).join(','))).join('\n');
   const blob = new Blob(["\ufeff"+csv], {type:'text/csv;charset=utf-8;'});
   const link = document.createElement('a');
@@ -1541,10 +1809,10 @@ async function exportFullReportCSV(){
   allCases.forEach(c=>{
     const visits = visitsByCase[c.id]||[];
     if(!visits.length){
-      allRows.push([c.pctsId,c.name,c.village,c.block,c.riskLevel,c.status,'','','','','','','','','','','','','','','','']);
+      allRows.push([c.pctsId,c.name,c.village,c.block,riskOf(c),c.status,'','','','','','','','','','','','','','','','']);
     }else{
       visits.forEach(v=>{
-        allRows.push([c.pctsId,c.name,c.village,c.block,c.riskLevel,c.status,v.date,v.platform,v.bp,v.hb,v.sugar,v.urineTest,v.hiv,v.syphilis,v.ivSucrose,v.fcm,v.bloodTransfusion,v.findings,v.action,v.ambulance,v.enteredByName,v.enteredByRole]);
+        allRows.push([c.pctsId,c.name,c.village,c.block,riskOf(c),c.status,v.date,v.platform,v.bp,v.hb,v.sugar,v.urineTest,v.hiv,v.syphilis,v.ivSucrose,v.fcm,v.bloodTransfusion,v.findings,v.action,v.ambulance,v.enteredByName,v.enteredByRole]);
       });
     }
   });
