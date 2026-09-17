@@ -117,6 +117,18 @@ main{padding:18px 20px 60px;max-width:1200px;margin:0 auto;}
 .footRow{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
 textarea{min-height:56px;resize:vertical;}
 .small{font-size:11.5px;color:#8a7a7a;}
+/* ---- बल्क चयन / हटाना (केवल Admin) ---- */
+.adminbar{background:#FFF6F5;border:1px dashed #B00020;border-radius:10px;padding:10px 12px;margin-bottom:12px;}
+.adminbar .arow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.adminbar .arow+.arow{margin-top:8px;}
+.adminbar input,.adminbar select{padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:13px;}
+.adminbar .grow{flex:1;min-width:200px;}
+.btn.danger{background:#B00020;color:#fff;}
+.btn.danger:hover{background:#8A0019;}
+.btn.danger.ghost{background:#fff;color:#B00020;border:1px solid #B00020;}
+.casecard.picked{background:#FFF3F1;box-shadow:inset 0 0 0 2px #B00020;}
+.casecard .pickbox{width:16px;height:16px;vertical-align:middle;margin-inline-end:6px;cursor:pointer;}
+
 table.linelist{width:100%;border-collapse:collapse;font-size:12.5px;}
 table.linelist th,table.linelist td{border:1px solid var(--line);padding:6px 8px;text-align:left;}
 table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);position:sticky;top:0;}
@@ -171,6 +183,34 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
 
     <!-- MY LIST -->
     <section id="tab-list" class="hidden">
+      <div class="adminbar hidden" id="listAdminBar">
+        <div class="arow">
+          <b style="font-size:13px;color:#B00020;">🗑 Admin: HRP केस हटाना (एकल व बल्क)</b>
+          <button class="btn small danger ghost" id="selModeBtn" onclick="toggleSelectMode()">☑ चयन मोड चालू करें</button>
+          <button class="btn small ghost" onclick="selectAllFiltered()">सभी दिख रहे केस चुनें</button>
+          <button class="btn small ghost" onclick="clearSelection()">चयन हटाएं</button>
+          <button class="btn small danger" onclick="bulkDeleteSelected()">चयनित हटाएं (<span id="selCount">0</span>)</button>
+        </div>
+        <div class="arow">
+          <input class="grow" id="bd_pcts" placeholder="PCTS ID सूची — अल्पविराम, स्पेस या नई पंक्ति से अलग कर पेस्ट करें">
+          <button class="btn small danger ghost" onclick="bulkDeleteByPcts()">इन PCTS ID वाले केस हटाएं</button>
+        </div>
+        <div class="arow">
+          <select id="bd_block" onchange="onBdBlockChange()"><option value="">— ब्लॉक चुनें —</option></select>
+          <select id="bd_facility"><option value="">सभी सुविधाएं</option></select>
+          <select id="bd_status">
+            <option value="">सभी स्थिति</option>
+            <option value="active">सक्रिय</option>
+            <option value="delivered">प्रसव हो चुका</option>
+            <option value="referred">रेफर</option>
+            <option value="ltfu">संपर्क में नहीं</option>
+            <option value="closed">बंद</option>
+          </select>
+          <button class="btn small danger ghost" onclick="bulkDeleteByScope()">इस क्षेत्र के सभी केस हटाएं</button>
+        </div>
+        <div class="small" style="margin-top:6px;">हटाया गया केस व उसकी सभी फॉलो-अप/सेवा प्रविष्टियाँ स्थायी रूप से मिट जाती हैं — यह वापस नहीं लिया जा सकता। हटाने से पहले "पूर्ण रिपोर्ट (विज़िट सहित)" से बैकअप निर्यात कर लेना उचित रहेगा।</div>
+        <div class="small" id="bd_progress" style="margin-top:6px;white-space:pre-line;font-weight:600;"></div>
+      </div>
       <div class="filterbar">
         <input class="grow" id="f_search" placeholder="नाम / गाँव / PCTS ID से खोजें..." oninput="renderCaseList()">
         <select id="f_risk" onchange="renderCaseList()">
@@ -594,8 +634,13 @@ function enterApp(){
   if(currentUser.role==='admin') listenUsers();
   const frBtn = document.getElementById('fullReportBtn');
   if(frBtn) frBtn.style.display = currentUser.role==='admin' ? 'inline-block' : 'none';
+  selectMode = false; selectedCaseIds.clear();
+  const selBtn = document.getElementById('selModeBtn');
+  if(selBtn) selBtn.textContent = '☑ चयन मोड चालू करें';
+  initAdminBulkUI();
 }
 function switchTab(name){
+  activeListTab = name;
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
   ['dashboard','list','anyservice','register','mypass','users'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('hidden', t!==name);
@@ -625,6 +670,12 @@ function listenCases(){
   if(unsubCases) unsubCases();
   unsubCases = scopedCasesQuery().onSnapshot(snap=>{
     allCases = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    // हटाए जा चुके केसों को चयन-सूची से भी हटा दें
+    if(selectedCaseIds.size){
+      const live = new Set(allCases.map(c=>c.id));
+      Array.from(selectedCaseIds).forEach(id=>{ if(!live.has(id)) selectedCaseIds.delete(id); });
+    }
+    if(currentUser && currentUser.role==='admin') onBdBlockChange();
     renderDashboard(); renderCaseList();
     if(activeCaseId) openCase(activeCaseId, true);
   }, err=>console.error(err));
@@ -712,8 +763,14 @@ function caseCardHTML(c){
   const catsHTML = (c.riskCategories&&c.riskCategories.length)
     ? `<div class="meta" style="margin-top:3px;">${c.riskCategories.map(r=>`<span class="badge red" style="margin:1px 3px 1px 0;font-size:11px;padding:1px 6px;">${esc(r)}</span>`).join('')}</div>`
     : '';
-  return `<div class="casecard risk-${c.riskLevel}" onclick="openCase('${c.id}')">
-    <div class="nm">${esc(c.name)} <span class="small">(${c.age||'-'})</span></div>
+  const pickable = selectMode && activeListTab==='list' && currentUser && currentUser.role==='admin';
+  const picked = selectedCaseIds.has(c.id);
+  const pickBox = pickable
+    ? `<input type="checkbox" class="pickbox" ${picked?'checked':''} onclick="event.stopPropagation();toggleCaseSelect('${c.id}')">`
+    : '';
+  const onClick = pickable ? `toggleCaseSelect('${c.id}')` : `openCase('${c.id}')`;
+  return `<div class="casecard risk-${c.riskLevel} ${picked?'picked':''}" onclick="${onClick}">
+    <div class="nm">${pickBox}${esc(c.name)} <span class="small">(${c.age||'-'})</span></div>
     <div class="small" style="font-family:'Roboto Mono',monospace;color:#8a7a7a;">PCTS: ${esc(c.pctsId||'—')}</div>
     <div class="meta">${esc(c.village||'')} · ${esc(c.block||'')} · ${esc(c.facility||'')}</div>
     <div class="meta">EDD: ${fmtDateDMY(c.edd)||'—'} · ${dueLine}</div>
@@ -739,7 +796,143 @@ function renderCaseList(){
     return (order[a.riskLevel]??3) - (order[b.riskLevel]??3);
   });
   const el = document.getElementById('caseList');
+  lastFilteredCases = list;
   if(el) el.innerHTML = list.length ? list.map(caseCardHTML).join('') : `<div class="emptynote">कोई केस नहीं मिला।</div>`;
+  updateSelCount();
+}
+
+/* ================= ADMIN: HRP केस हटाना (एकल व बल्क) ================= */
+let selectMode = false;
+let selectedCaseIds = new Set();
+let lastFilteredCases = [];
+let activeListTab = 'dashboard';
+
+function initAdminBulkUI(){
+  const bar = document.getElementById('listAdminBar');
+  if(!bar) return;
+  const isAdmin = currentUser && currentUser.role==='admin';
+  bar.classList.toggle('hidden', !isAdmin);
+  if(isAdmin){
+    const bsel = document.getElementById('bd_block');
+    if(bsel && bsel.options.length<=1){
+      bsel.innerHTML = '<option value="">— ब्लॉक चुनें —</option>' + BLOCKS.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
+    }
+    onBdBlockChange();
+  }
+}
+function onBdBlockChange(){
+  const blk = document.getElementById('bd_block')?.value || '';
+  const fs = document.getElementById('bd_facility');
+  if(!fs) return;
+  const facs = Array.from(new Set(allCases.filter(c=>!blk || c.block===blk).map(c=>c.facility).filter(Boolean))).sort();
+  const cur = fs.value;
+  fs.innerHTML = '<option value="">सभी सुविधाएं</option>' + facs.map(f=>`<option value="${esc(f)}" ${f===cur?'selected':''}>${esc(f)}</option>`).join('');
+  if(!facs.includes(cur)) fs.value = '';
+}
+function toggleSelectMode(){
+  selectMode = !selectMode;
+  if(!selectMode) selectedCaseIds.clear();
+  const btn = document.getElementById('selModeBtn');
+  if(btn) btn.textContent = selectMode ? '✖ चयन मोड बंद करें' : '☑ चयन मोड चालू करें';
+  renderCaseList();
+}
+function toggleCaseSelect(id){
+  if(selectedCaseIds.has(id)) selectedCaseIds.delete(id); else selectedCaseIds.add(id);
+  renderCaseList();
+}
+function selectAllFiltered(){
+  if(!selectMode){ toggleSelectMode(); }
+  lastFilteredCases.forEach(c=>selectedCaseIds.add(c.id));
+  renderCaseList();
+}
+function clearSelection(){
+  selectedCaseIds.clear();
+  renderCaseList();
+}
+function updateSelCount(){
+  const el = document.getElementById('selCount');
+  if(el) el.textContent = selectedCaseIds.size;
+}
+/* केस + उसकी सभी विज़िट/सेवा प्रविष्टियाँ हटाना (Firestore batch सीमा का ध्यान रखते हुए) */
+async function deleteCasesByIds(ids, progEl){
+  let deleted = 0, failed = 0;
+  for(let i=0;i<ids.length;i++){
+    const id = ids[i];
+    try{
+      const visitsSnap = await db.collection('hrp_visits').where('caseId','==', id).get();
+      const docs = visitsSnap.docs;
+      for(let s=0; s<docs.length; s+=400){
+        const batch = db.batch();
+        docs.slice(s, s+400).forEach(d=>batch.delete(d.ref));
+        await batch.commit();
+      }
+      await db.collection('hrp_cases').doc(id).delete();
+      deleted++;
+    }catch(e){ console.error('delete error', id, e); failed++; }
+    if(progEl) progEl.textContent = `हटाया जा रहा है... ${i+1}/${ids.length} (सफल: ${deleted}, असफल: ${failed})`;
+  }
+  return {deleted, failed};
+}
+function confirmBulkDelete(n, extra){
+  if(!n){ alert('हटाने हेतु कोई केस नहीं चुना गया है।'); return false; }
+  if(!confirm(`⚠ चेतावनी\n\n${n} HRP केस${extra?' ('+extra+')':''} तथा उनकी सभी फॉलो-अप/सेवा प्रविष्टियाँ स्थायी रूप से हटा दी जाएँगी।\nयह कार्य वापस नहीं लिया जा सकता।\n\nक्या आप आगे बढ़ना चाहते हैं?`)) return false;
+  const typed = prompt(`पुष्टि हेतु नीचे ठीक ${n} लिखें (हटाए जाने वाले केसों की संख्या):`);
+  if(String(typed||'').trim() !== String(n)){ alert('संख्या मेल नहीं खाई — कुछ भी नहीं हटाया गया।'); return false; }
+  return true;
+}
+async function bulkDeleteSelected(){
+  if(!currentUser || currentUser.role!=='admin') return;
+  const ids = Array.from(selectedCaseIds);
+  if(!confirmBulkDelete(ids.length, 'चयनित')) return;
+  const progEl = document.getElementById('bd_progress');
+  const r = await deleteCasesByIds(ids, progEl);
+  selectedCaseIds.clear();
+  progEl.textContent = `पूर्ण: ${r.deleted} केस हटाए गए${r.failed?`, ${r.failed} असफल`:''}।`;
+  renderCaseList();
+}
+async function bulkDeleteByPcts(){
+  if(!currentUser || currentUser.role!=='admin') return;
+  const raw = document.getElementById('bd_pcts').value || '';
+  const wanted = raw.split(/[\s,;\n\r\t]+/).map(s=>s.trim()).filter(Boolean);
+  const progEl = document.getElementById('bd_progress');
+  if(!wanted.length){ alert('कृपया कम से कम एक PCTS ID लिखें।'); return; }
+  const set = new Set(wanted);
+  const matched = allCases.filter(c=> set.has(String(c.pctsId||'').trim()));
+  const notFound = wanted.filter(w=> !allCases.some(c=>String(c.pctsId||'').trim()===w));
+  if(!matched.length){ progEl.textContent = `दी गई ${wanted.length} PCTS ID में से कोई भी केस नहीं मिला।`; return; }
+  if(!confirmBulkDelete(matched.length, 'PCTS ID सूची से')) return;
+  const r = await deleteCasesByIds(matched.map(c=>c.id), progEl);
+  progEl.textContent = `पूर्ण: ${r.deleted} केस हटाए गए${r.failed?`, ${r.failed} असफल`:''}।` +
+    (notFound.length ? `\nनहीं मिली PCTS ID (${notFound.length}): ${notFound.join(', ')}` : '');
+  document.getElementById('bd_pcts').value = '';
+  renderCaseList();
+}
+async function bulkDeleteByScope(){
+  if(!currentUser || currentUser.role!=='admin') return;
+  const blk = document.getElementById('bd_block').value;
+  const fac = document.getElementById('bd_facility').value;
+  const st  = document.getElementById('bd_status').value;
+  const progEl = document.getElementById('bd_progress');
+  if(!blk && !fac && !st){ alert('सुरक्षा हेतु कम से कम एक फ़िल्टर (ब्लॉक / सुविधा / स्थिति) चुनना आवश्यक है।'); return; }
+  const matched = allCases.filter(c=>
+    (!blk || c.block===blk) && (!fac || c.facility===fac) && (!st || c.status===st));
+  const label = [blk&&('ब्लॉक: '+blk), fac&&('सुविधा: '+fac), st&&('स्थिति: '+st)].filter(Boolean).join(', ');
+  if(!matched.length){ progEl.textContent = 'इस क्षेत्र में कोई केस नहीं मिला।'; return; }
+  if(!confirmBulkDelete(matched.length, label)) return;
+  const r = await deleteCasesByIds(matched.map(c=>c.id), progEl);
+  progEl.textContent = `पूर्ण: ${r.deleted} केस हटाए गए${r.failed?`, ${r.failed} असफल`:''}। (${label})`;
+  renderCaseList();
+}
+/* एकल केस हटाना — केस विवरण विंडो से */
+async function deleteCase(id){
+  if(!currentUser || currentUser.role!=='admin') return;
+  const c = allCases.find(x=>x.id===id) || anyServiceCases.find(x=>x.id===id);
+  const label = c ? `${c.name} (PCTS: ${c.pctsId||'—'})` : 'यह केस';
+  if(!confirm(`क्या आप वाकई ${label} को स्थायी रूप से हटाना चाहते हैं?\nइसकी सभी फॉलो-अप/सेवा प्रविष्टियाँ भी हट जाएँगी। यह कार्य वापस नहीं लिया जा सकता।`)) return;
+  const r = await deleteCasesByIds([id], null);
+  closeModal();
+  alert(r.deleted ? 'केस सफलतापूर्वक हटा दिया गया।' : 'केस हटाने में त्रुटि हुई — कृपया पुनः प्रयास करें।');
+  renderCaseList();
 }
 
 /* ================= SERVICE ENTRY AT ANY FACILITY (district-wide search) ================= */
@@ -982,6 +1175,7 @@ async function openCase(id, silentRefresh){
       </div>
       <div>
         ${currentUser.canEditEntries?`<button class="btn small ghost" style="margin-inline-end:6px;" onclick="toggleEditCase()">✎ संपादित करें</button>`:''}
+        ${currentUser.role==='admin'?`<button class="btn small ghost" style="margin-inline-end:6px;color:#B00020;border-color:#B00020;" onclick="deleteCase('${id}')">🗑 केस हटाएं</button>`:''}
         <button onclick="closeModal()">✕</button>
       </div>
     </div>
