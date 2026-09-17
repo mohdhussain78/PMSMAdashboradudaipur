@@ -227,6 +227,11 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
       </div>
       <div class="filterbar">
         <input class="grow" id="f_search" placeholder="नाम / गाँव / PCTS ID से खोजें..." oninput="renderCaseList()">
+        <select id="f_block" onchange="onListBlockChange()"><option value="">सभी ब्लॉक</option></select>
+        <select id="f_facility" onchange="renderCaseList()"><option value="">सभी सुविधाएं</option></select>
+        <select id="f_subcenter" onchange="renderCaseList()"><option value="">सभी उप-केंद्र</option></select>
+        <select id="f_village" onchange="renderCaseList()"><option value="">सभी गाँव</option></select>
+        <button class="btn small ghost" onclick="clearListFilters()">फ़िल्टर हटाएं</button>
         <select id="f_status" onchange="renderCaseList()">
           <option value="active">सक्रिय (Active)</option>
           <option value="">सभी</option>
@@ -887,10 +892,19 @@ function caseCardHTML(c){
   </div>`;
 }
 function renderCaseList(){
+  populateListFilters();
   const search = (document.getElementById('f_search')?.value||'').toLowerCase();
+  const blockF = document.getElementById('f_block')?.value || '';
+  const facF = document.getElementById('f_facility')?.value || '';
+  const subF = document.getElementById('f_subcenter')?.value || '';
+  const villF = document.getElementById('f_village')?.value || '';
   const statusF = document.getElementById('f_status')?.value;
   const eddF = document.getElementById('f_edd')?.value;
   let list = allCases.filter(c=>{
+    if(blockF && c.block!==blockF) return false;
+    if(facF && c.facility!==facF) return false;
+    if(subF && c.subcenter!==subF) return false;
+    if(villF && c.village!==villF) return false;
     if(statusF && c.status!==statusF) return false;
     if(!statusF && document.getElementById('f_status') && document.getElementById('f_status').value==='active' && c.status!=='active') return false;
     if(!matchesEDDFilter(c, eddF)) return false;
@@ -904,6 +918,46 @@ function renderCaseList(){
   lastFilteredCases = list;
   if(el) el.innerHTML = list.length ? list.map(caseCardHTML).join('') : `<div class="emptynote">कोई केस नहीं मिला।</div>`;
   updateSelCount();
+}
+
+/* ---- HRP सूची फ़िल्टर: ब्लॉक / सुविधा / उप-केंद्र / गाँव ----
+   ये चारों एक-दूसरे पर निर्भर हैं — ब्लॉक चुनने पर सुविधा/उप-केंद्र/गाँव की सूची उसी ब्लॉक तक सीमित हो जाती है, आदि। */
+function populateListFilters(){
+  const bSel = document.getElementById('f_block');
+  const fSel = document.getElementById('f_facility');
+  const sSel = document.getElementById('f_subcenter');
+  const vSel = document.getElementById('f_village');
+  if(!bSel || !fSel || !sSel || !vSel) return;
+  const curB = bSel.value, curF = fSel.value, curS = sSel.value, curV = vSel.value;
+
+  const blocks = Array.from(new Set(allCases.map(c=>c.block).filter(Boolean))).sort();
+  bSel.innerHTML = '<option value="">सभी ब्लॉक</option>' +
+    blocks.map(b=>`<option value="${esc(b)}" ${b===curB?'selected':''}>${esc(b)}</option>`).join('');
+  if(!blocks.includes(curB)) bSel.value = '';
+  const blk = bSel.value;
+
+  const scopedByBlock = allCases.filter(c=> !blk || c.block===blk);
+
+  const facs = Array.from(new Set(scopedByBlock.map(c=>c.facility).filter(Boolean))).sort();
+  fSel.innerHTML = '<option value="">सभी सुविधाएं</option>' +
+    facs.map(f=>`<option value="${esc(f)}" ${f===curF?'selected':''}>${esc(f)}</option>`).join('');
+  if(!facs.includes(curF)) fSel.value = '';
+
+  const subs = Array.from(new Set(scopedByBlock.map(c=>c.subcenter).filter(Boolean))).sort();
+  sSel.innerHTML = '<option value="">सभी उप-केंद्र</option>' +
+    subs.map(s=>`<option value="${esc(s)}" ${s===curS?'selected':''}>${esc(s)}</option>`).join('');
+  if(!subs.includes(curS)) sSel.value = '';
+
+  const vills = Array.from(new Set(scopedByBlock.map(c=>c.village).filter(Boolean))).sort();
+  vSel.innerHTML = '<option value="">सभी गाँव</option>' +
+    vills.map(v=>`<option value="${esc(v)}" ${v===curV?'selected':''}>${esc(v)}</option>`).join('');
+  if(!vills.includes(curV)) vSel.value = '';
+}
+function onListBlockChange(){ populateListFilters(); renderCaseList(); }
+function clearListFilters(){
+  ['f_block','f_facility','f_subcenter','f_village'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  populateListFilters();
+  renderCaseList();
 }
 
 /* ================= ADMIN: HRP केस हटाना (एकल व बल्क) ================= */
