@@ -12,7 +12,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 
 <style>
 :root{
@@ -118,31 +117,6 @@ main{padding:18px 20px 60px;max-width:1200px;margin:0 auto;}
 .footRow{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
 textarea{min-height:56px;resize:vertical;}
 .small{font-size:11.5px;color:#8a7a7a;}
-
-/* ---- HRP जोखिम फ्लैग ---- */
-.flaggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;}
-.flagitem{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-left:5px solid var(--red);
-  border-radius:9px;padding:9px 11px;font-size:12.5px;background:var(--red-light);color:#7a2020;
-  cursor:pointer;transition:box-shadow .15s;line-height:1.3;}
-.flagitem:hover{box-shadow:0 3px 10px rgba(0,0,0,.09);}
-.flagitem.zero{background:#fff;border-left-color:#DED5CD;color:#9a8e8e;}
-.flagitem.sel{outline:2px solid var(--maroon);outline-offset:1px;}
-.flagitem .fico{font-size:14px;line-height:1;}
-.flagitem .fcnt{margin-inline-start:auto;font-family:'Roboto Mono',monospace;font-weight:700;font-size:16px;color:var(--red);}
-.flagitem.zero .fcnt{color:#b6aaa6;}
-.caseflags{margin-top:7px;display:flex;gap:5px;flex-wrap:wrap;}
-.miniflag{display:inline-flex;align-items:center;gap:3px;background:var(--red-light);color:#7a2020;
-  border:1px solid #EBCFCB;border-radius:5px;padding:2px 6px;font-size:10.5px;font-weight:600;}
-
-/* ---- बल्क चयन / हटाना (Admin) ---- */
-.adminbar{background:#FFF6F5;border:1px dashed var(--red);border-radius:10px;padding:10px 12px;margin-bottom:12px;}
-.adminbar .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
-.btn.danger{background:#B00020;}
-.btn.danger:hover{background:#8A0019;}
-.btn.danger.ghost{background:#fff;color:#B00020;border:1px solid #B00020;}
-.casecard.picked{background:#FFF3F1;border-color:var(--red);box-shadow:inset 0 0 0 1px var(--red);}
-.casecard .pickbox{width:16px;height:16px;vertical-align:middle;margin-inline-end:6px;cursor:pointer;}
-
 table.linelist{width:100%;border-collapse:collapse;font-size:12.5px;}
 table.linelist th,table.linelist td{border:1px solid var(--line);padding:6px 8px;text-align:left;}
 table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);position:sticky;top:0;}
@@ -180,24 +154,10 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
   <main>
     <!-- DASHBOARD -->
     <section id="tab-dashboard">
-      <div class="panel" style="padding-bottom:10px;">
-        <div class="filterbar" style="margin:0;">
-          <div class="field" style="margin:0;"><label>ब्लॉक</label><select id="db_block" onchange="onDbBlockChange()"><option value="">सभी ब्लॉक</option></select></div>
-          <div class="field" style="margin:0;"><label>सुविधा (Facility)</label><select id="db_facility" onchange="renderDashboard()"><option value="">सभी सुविधाएं</option></select></div>
-          <button class="btn small ghost" style="align-self:flex-end;" onclick="document.getElementById('db_block').value='';document.getElementById('db_facility').value='';onDbBlockChange();">फ़िल्टर हटाएं</button>
-        </div>
-      </div>
       <div class="statrow" id="statRow"></div>
       <div class="panel">
-        <h3>🚩 HRP जोखिम फ्लैग / HRP Risk Flags (आपके क्षेत्र के सक्रिय केस)</h3>
-        <div class="small" style="margin-bottom:10px;">
-          सभी पंजीकृत HRP <b>उच्च जोखिम</b> माने जाते हैं। नीचे प्रत्येक जोखिम श्रेणी एक फ्लैग के रूप में दिखाई गई है —
-          किसी भी फ्लैग पर क्लिक कर उस श्रेणी के सभी केस "HRP सूची" में देखें।
-        </div>
-        <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
-          <label class="small"><input type="checkbox" id="db_showZeroFlags" onchange="renderDashboard()" style="width:auto;vertical-align:middle;"> शून्य संख्या वाले फ्लैग भी दिखाएँ</label>
-        </div>
-        <div id="categoryStats" class="flaggrid"></div>
+        <h3>🍼 इस माह व अगले माह में संभावित प्रसव (EDD अनुसार) / Upcoming Deliveries (This & Next Month by EDD)</h3>
+        <div class="caselist" id="upcomingDeliveryList"></div>
       </div>
       <div class="panel">
         <h3>⚠ अनुवर्ती लंबित / Overdue Follow-up</h3>
@@ -207,54 +167,32 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
 
     <!-- MY LIST -->
     <section id="tab-list" class="hidden">
-      <div class="small" style="margin-bottom:10px;">
-        🚩 <b>सभी पंजीकृत HRP उच्च जोखिम (High Risk) माने जाते हैं।</b> नीचे प्रत्येक केस पर उसकी जोखिम श्रेणियाँ फ्लैग के रूप में दिखती हैं।
-      </div>
-      <div class="adminbar hidden" id="listAdminBar">
-        <div class="row">
-          <b style="font-size:13px;color:#B00020;">Admin: बल्क HRP हटाना</b>
-          <button class="btn small danger ghost" id="selModeBtn" onclick="toggleSelectMode()">☑ चयन मोड चालू करें</button>
-          <button class="btn small ghost" onclick="selectAllFiltered()">सभी दिख रहे केस चुनें</button>
-          <button class="btn small ghost" onclick="clearSelection()">चयन हटाएं</button>
-          <button class="btn small danger" onclick="bulkDeleteSelected()">🗑 चयनित हटाएं (<span id="selCount">0</span>)</button>
-        </div>
-        <div class="row" style="margin-top:8px;">
-          <input class="grow" id="bd_pcts" placeholder="PCTS ID सूची — अल्पविराम, स्पेस या नई पंक्ति से अलग कर पेस्ट करें">
-          <button class="btn small danger ghost" onclick="bulkDeleteByPcts()">इन PCTS ID वाले केस हटाएं</button>
-        </div>
-        <div class="row" style="margin-top:8px;">
-          <select id="bd_block"><option value="">— ब्लॉक चुनें —</option></select>
-          <select id="bd_facility"><option value="">सभी सुविधाएं</option></select>
-          <select id="bd_status">
-            <option value="">सभी स्थिति</option>
-            <option value="active">सक्रिय</option>
-            <option value="delivered">प्रसव हो चुका</option>
-            <option value="referred">रेफर</option>
-            <option value="ltfu">संपर्क में नहीं</option>
-            <option value="closed">बंद</option>
-          </select>
-          <button class="btn small danger ghost" onclick="bulkDeleteByScope()">इस क्षेत्र के सभी केस हटाएं</button>
-        </div>
-        <div class="small" style="margin-top:6px;">हटाया गया केस व उसकी सभी फॉलो-अप/सेवा प्रविष्टियाँ स्थायी रूप से मिट जाती हैं — यह वापस नहीं लिया जा सकता।</div>
-        <div class="small" id="bd_progress" style="margin-top:6px;white-space:pre-line;font-weight:600;"></div>
-      </div>
       <div class="filterbar">
         <input class="grow" id="f_search" placeholder="नाम / गाँव / PCTS ID से खोजें..." oninput="renderCaseList()">
-        <select id="f_flag" onchange="renderCaseList()">
-          <option value="">सभी जोखिम फ्लैग (श्रेणियाँ)</option>
+        <select id="f_risk" onchange="renderCaseList()">
+          <option value="">सभी जोखिम स्तर</option>
+          <option value="red">उच्च जोखिम (Red)</option>
+          <option value="yellow">मध्यम जोखिम (Yellow)</option>
+          <option value="green">निम्न जोखिम (Green)</option>
         </select>
         <select id="f_status" onchange="renderCaseList()">
           <option value="active">सक्रिय (Active)</option>
           <option value="">सभी</option>
           <option value="delivered">प्रसव / प्रसव हो चुका</option>
-          <option value="maternal_death">मातृ मृत्यु</option>
           <option value="referred">रेफर किया गया</option>
           <option value="ltfu">संपर्क में नहीं (LTFU)</option>
           <option value="closed">बंद</option>
         </select>
+        <select id="f_edd" onchange="renderCaseList()">
+          <option value="">EDD: सभी</option>
+          <option value="this">EDD: इस माह में</option>
+          <option value="next">EDD: अगले माह में</option>
+          <option value="thisnext">EDD: इस व अगले माह में</option>
+        </select>
         <button class="btn small" onclick="exportCSV()">Excel निर्यात (केस सूची)</button>
         <button class="btn small ghost" id="fullReportBtn" onclick="exportFullReportCSV()" style="display:none;">पूर्ण रिपोर्ट (विज़िट सहित)</button>
       </div>
+      <div class="small" style="margin:6px 0 0;">ऊपर EDD फ़िल्टर चुनने पर "Excel निर्यात" व "पूर्ण रिपोर्ट" दोनों उसी फ़िल्टर के अनुसार डेटा निर्यात करेंगे — जैसे दैनिक सेवा रिपोर्ट के लिए केवल इस/अगले माह में प्रसव होने वाली HRP की सेवाएं।</div>
       <div class="caselist" id="caseList"></div>
     </section>
 
@@ -267,28 +205,15 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
         </div>
         <div class="filterbar">
           <input class="grow" id="as_query" placeholder="PCTS ID / नाम / गाँव / सुविधा से खोजें..." oninput="renderAnyServiceList()">
+          <select id="as_edd" onchange="renderAnyServiceList()">
+            <option value="">EDD: सभी</option>
+            <option value="this">EDD: इस माह में</option>
+            <option value="next">EDD: अगले माह में</option>
+            <option value="thisnext">EDD: इस व अगले माह में</option>
+          </select>
           <button class="btn small" onclick="renderAnyServiceList()">🔍 खोजें</button>
         </div>
         <div class="caselist" id="as_results"></div>
-      </div>
-    </section>
-
-    <!-- DAILY SERVICE REPORT (facility/block/district) -->
-    <section id="tab-dailyreport" class="hidden">
-      <div class="panel">
-        <h3>दैनिक सेवा रिपोर्ट / Daily Service Report</h3>
-        <div class="small" style="margin-bottom:10px;">
-          यह रिपोर्ट आपके क्षेत्र (facility/block/district अनुसार) की उन सभी HRP महिलाओं को दिखाती है जिन्हें चुनी गई तारीख़ को <b>कहीं भी (किसी भी संस्थान/प्लेटफ़ॉर्म पर)</b> कोई सेवा दी गई — चाहे वह सेवा किसी अन्य facility पर ही क्यों न दी गई हो।
-        </div>
-        <div class="filterbar">
-          <div class="field" style="margin:0;"><label>तारीख़ चुनें</label><input type="date" id="dr_date"></div>
-          <div class="field" style="margin:0;"><label>ब्लॉक</label><select id="dr_block" onchange="onDrBlockChange()"><option value="">सभी ब्लॉक</option></select></div>
-          <div class="field" style="margin:0;"><label>सुविधा (Facility)</label><select id="dr_facility" onchange="runDailyServiceReport()"><option value="">सभी सुविधाएं</option></select></div>
-          <button class="btn small" style="align-self:flex-end;" onclick="runDailyServiceReport()">रिपोर्ट देखें</button>
-          <button class="btn small ghost" style="align-self:flex-end;" onclick="exportDailyReportCSV()">Excel निर्यात</button>
-        </div>
-        <div class="small" id="dr_summary" style="margin:10px 0;font-weight:700;"></div>
-        <div class="tablewrap"><table class="linelist" id="dr_table"></table></div>
       </div>
     </section>
 
@@ -297,7 +222,7 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
       <div class="panel">
         <h3>नया HRP केस पंजीकरण / Register New HRP Case</h3>
         <div class="grid2">
-          <div class="field"><label>PCTS ID *</label><input id="r_pcts" inputmode="numeric" placeholder="RCH/PCTS ID (कितने भी अंकों की हो सकती है)"></div>
+          <div class="field"><label>PCTS ID (15 अंक) *</label><input id="r_pcts" maxlength="15" inputmode="numeric" placeholder="15 अंकों की RCH/PCTS ID"></div>
           <div class="field"><label>महिला का नाम *</label><input id="r_name"></div>
           <div class="field"><label>पति का नाम</label><input id="r_husband"></div>
           <div class="field"><label>आयु *</label><input id="r_age" type="number"></div>
@@ -309,18 +234,17 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
           <div class="field"><label>ASHA का नाम</label><input id="r_asha"></div>
           <div class="field"><label>ASHA मोबाइल</label><input id="r_ashaphone"></div>
           <div class="field"><label>ANM का नाम</label><input id="r_anm"></div>
-          <div class="field"><label>LMP</label><input id="r_lmp" type="date"></div>
-          <div class="field"><label>EDD (संभावित प्रसव तिथि)</label><input id="r_edd" type="date"></div>
+          <div class="field"><label>LMP</label><input id="r_lmp" type="text" placeholder="dd/mm/yyyy" maxlength="10" oninput="autoSlashDate(this)"></div>
+          <div class="field"><label>EDD (संभावित प्रसव तिथि)</label><input id="r_edd" type="text" placeholder="dd/mm/yyyy" maxlength="10" oninput="autoSlashDate(this)"></div>
         </div>
-        <div class="section-title">जोखिम श्रेणियाँ / HRP फ्लैग (एक या अधिक चुनें) / Risk Categories</div>
+        <div class="section-title">जोखिम श्रेणियाँ (एक या अधिक चुनें) / Risk Categories</div>
         <div class="chipset" id="riskChips"></div>
         <div class="field" style="margin-top:10px;"><label>अन्य विवरण / Clinical Notes</label><textarea id="r_notes"></textarea></div>
         <div class="grid2" style="margin-top:6px;">
-          <div class="field"><label>जोखिम स्तर / Risk Level</label>
-            <div class="badge red" style="display:inline-block;padding:7px 12px;font-size:13px;">🚩 उच्च जोखिम (High Risk) — सभी HRP हेतु निर्धारित</div>
-            <div class="small" style="margin-top:4px;">प्रत्येक पंजीकृत HRP स्वतः उच्च जोखिम माना जाता है — इसे बदलने की आवश्यकता नहीं।</div>
+          <div class="field"><label>जोखिम स्तर / Risk Level *</label>
+            <select id="r_level"><option value="red">उच्च (Red)</option><option value="yellow" selected>मध्यम (Yellow)</option><option value="green">निम्न (Green)</option></select>
           </div>
-          <div class="field"><label>अगली अनुवर्ती तिथि / Next Follow-up Due</label><input id="r_nextdue" type="date"></div>
+          <div class="field"><label>अगली अनुवर्ती तिथि / Next Follow-up Due</label><input id="r_nextdue" type="text" placeholder="dd/mm/yyyy" maxlength="10" oninput="autoSlashDate(this)"></div>
         </div>
         <div class="footRow"><button class="btn" onclick="registerCase()">केस दर्ज करें / Register</button></div>
         <div class="err" id="r_err"></div>
@@ -330,11 +254,11 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
         <h3>Excel के माध्यम से एक साथ कई HRP केस दर्ज करें / Bulk Upload HRP Cases</h3>
         <div class="small" style="margin-bottom:8px;">
           Excel में पहली पंक्ति में ये कॉलम हेडर बिल्कुल इसी नाम से रखें:<br>
-          <b>PCTSID, Name, HusbandName, Age, GravidaParity, Village, Block, Subcenter, Facility, ASHAName, ASHAPhone, ANMName, LMP, EDD, RiskLevel, RiskCategories, Notes, NextDueDate</b><br>
-          · <b>PCTSID</b> की अंक-संख्या पर अब कोई सीमा नहीं है — कितने भी अंकों की PCTS ID चलेगी, बस खाली न हो। जो PCTS ID पहले से दर्ज है वह पंक्ति स्वतः छोड़ दी जाएगी (डुप्लीकेट नहीं बनेगा)।<br>
-          · <b>RiskLevel</b> कॉलम अब वैकल्पिक है — <b>सभी HRP स्वतः उच्च जोखिम (Red)</b> दर्ज होते हैं, इस कॉलम में कुछ भी लिखा हो तो भी।<br>
-          · <b>RiskCategories</b> में एक से अधिक श्रेणी को अर्धविराम ( ; ) से अलग कर लिखें (सूची ऊपर "जोखिम श्रेणियाँ" में देखें)। डाउनलोड किए गए टेम्पलेट में इस कॉलम पर क्लिक करने पर सही स्पेलिंग हेतु एक ड्रॉप-डाउन सूची भी दिखेगी — प्रारूप/कॉलम संरचना में कोई बदलाव नहीं है, केवल चयन आसान बनाने हेतु सूची जोड़ी गई है।<br>
-          · तिथियाँ (LMP, EDD, NextDueDate) <code>yyyy-mm-dd</code> या <code>dd/mm/yyyy</code> प्रारूप में लिखें।<br>
+          <b>PCTSID, Name, HusbandName, Age, GravidaParity, Village, Block, Subcenter, Facility, ASHAName, ASHAPhone, ANMName, LMP, EDD, RiskLevel, RiskCategory1, RiskCategory2, RiskCategory3, RiskCategory4, RiskCategory5, Notes, NextDueDate</b><br>
+          · <b>PCTSID</b> ठीक 15 अंकों का होना चाहिए — जो PCTS ID पहले से दर्ज है वह पंक्ति स्वतः छोड़ दी जाएगी (डुप्लीकेट नहीं बनेगा)।<br>
+          · <b>RiskLevel</b> में red / yellow / green लिखें (खाली छोड़ने पर yellow माना जाएगा)।<br>
+          · <b>एक से अधिक जोखिम श्रेणी के लिए</b> — <code>RiskCategory1, RiskCategory2, RiskCategory3, RiskCategory4, RiskCategory5</code> — इन पाँच अलग-अलग कॉलम में हर एक में एक श्रेणी लिखें (जितनी लागू हों उतने कॉलम भरें, बाकी खाली छोड़ दें)। टेम्पलेट की दूसरी शीट "Risk Categories List" से सही नाम कॉपी-पेस्ट करें ताकि स्पेलिंग सही रहे।<br>
+          · तिथियाँ (LMP, EDD, NextDueDate) <code>dd/mm/yyyy</code> प्रारूप में लिखें (जैसे 15/01/2026)।<br>
           · अपलोड के बाद सभी केस तुरंत (real-time) डैशबोर्ड व HRP सूची में — हर उपयोगकर्ता को उसकी भूमिका/अधिकार के अनुसार — दिखने लगेंगे, और कोई भी अधिकृत उपयोगकर्ता उनमें फ़ॉलो-अप सेवा प्रविष्टि जोड़ सकेगा।
           <div id="bulkCaseScopeNote" style="margin-top:4px;color:var(--maroon-dark);font-weight:600;"></div>
         </div>
@@ -406,20 +330,6 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
         <h3>उपयोगकर्ता सूची</h3>
         <div class="tablewrap"><table class="linelist" id="userTable"></table></div>
       </div>
-
-      <div class="panel" style="border-color:#B00020;">
-        <h3 style="color:#B00020;">🛠 Admin उपकरण / Admin Tools</h3>
-        <div class="small" style="margin-bottom:10px;">
-          <b>बल्क HRP हटाना</b> — "HRP सूची" टैब के सबसे ऊपर लाल पट्टी में उपलब्ध है। वहाँ तीन तरीक़े हैं:
-          (1) चयन मोड से केस चुनकर, (2) PCTS ID की सूची पेस्ट कर, (3) ब्लॉक/सुविधा/स्थिति के अनुसार पूरे क्षेत्र के केस।
-        </div>
-        <div class="small" style="margin-bottom:8px;">
-          <b>पुराने रिकॉर्ड सुधारें</b> — पहले जो केस मध्यम/निम्न जोखिम के रूप में दर्ज हुए थे, उन्हें नई नीति
-          (सभी HRP = उच्च जोखिम) के अनुसार डेटाबेस में भी उच्च जोखिम कर दें। डैशबोर्ड/सूची पर यह पहले से ही उच्च जोखिम दिखते हैं।
-        </div>
-        <button class="btn small ghost" onclick="normalizeAllToHighRisk()">सभी पुराने केस को उच्च जोखिम करें</button>
-        <div class="small" id="normProgress" style="margin-top:8px;white-space:pre-line;font-weight:600;"></div>
-      </div>
     </section>
   </main>
 </div>
@@ -460,58 +370,12 @@ function usernameToEmail(u){
 const BLOCKS = ["Girwa","Badgaon","Mavli","Vallabhnagar","Girwa Urban","Salumber","Sarada","Jhadol","Kherwada","Kotra","Gogunda","Rishabdev","Lasadiya","Bhinder","Kanod"];
 
 const RISK_CATEGORIES = [
-  "उच्च रक्तचाप (Hypertension) ->140/90",
-  "मधुमेह (डायबिटीज)",
-  "ए.पी.एच (APH)",
-  "मलेरिया",
-  "गंभीर एनीमिया- <7Hb",
-  "आयु (<18 Yr. />35Yr.)",
-  "कम लंबाई (<140 Cm.)",
-  "पूर्व में जटिल प्रसव का इतिहास",
-  "आड़ा बच्चा/ब्रीच प्रस्तुति",
-  "हृदय रोग",
-  "गुर्दे की बीमारी",
-  "हेपेटाइटिस-बी",
-  "लक्षण रहित जीवाणु मूत्र संक्रमण",
-  "HIV रिएक्टिव",
-  "सिफिलिस रिएक्टिव",
-  "हाइपोथायरॉइडिज़्म",
-  "टीबी पॉजिटिव",
-  "RTI/STI पॉजिटिव",
-  "RH निगेटिव रक्त समूह",
-  "उच्च बुखार",
-  "खराब प्रसूति इतिहास",
-  "गर्भपात/मृत जन्म का इतिहास",
-  "किशोरावस्था में गर्भावस्था",
-  "अत्यधिक बहुप्रसवा (ग्रैंड मल्टीपैरा)",
-  "CPD (संकुचित श्रोणी/सिर एवं श्रोणी में असंगति)",
-  "जुड़वा/अनेक गर्भावस्था",
-  "असामान्य भ्रूण हृदय गति (Abnormal FHR)",
-  "एक्लेम्पसिया (गर्भावस्था में दौरे/मिर्गी)",
-  "अन्य"
+  "गंभीर रक्ताल्पता (Hb<7) Severe Anemia","PIH / Pre-eclampsia / Eclampsia","रक्तस्राव APH/PPH history",
+  "पूर्व सिजेरियन / Scarred Uterus","असामान्य स्थिति / Malpresentation","जुड़वाँ / बहु गर्भ Multiple Pregnancy",
+  "Rh Negative","GDM / मधुमेह","HIV Reactive","Syphilis Reactive","Hepatitis B Reactive","टीबी / TB",
+  "हृदय रोग / Heart Disease","कम कद (<145cm)","किशोरावस्था गर्भ (<19yrs) Teenage Pregnancy",
+  "अधिक आयु / ग्रैंड मल्टीपैरा","खराब प्रसूति इतिहास BOH","मलेरिया","अन्य / Other"
 ];
-
-/* ================= नीति: सभी HRP उच्च जोखिम =================
-   इस सिस्टम में पंजीकृत प्रत्येक HRP को उच्च जोखिम (red) माना जाता है।
-   जोखिम श्रेणियाँ (RISK_CATEGORIES) अब "फ्लैग" के रूप में दिखाई जाती हैं। */
-const RISK_LEVEL_FIXED = 'red';
-function riskOf(){ return RISK_LEVEL_FIXED; }
-const HIGH_RISK_BADGE = '<span class="badge red">🚩 उच्च जोखिम</span>';
-
-/* PCTS ID — अंक-संख्या की कोई सीमा नहीं, केवल खाली नहीं होनी चाहिए */
-function normPcts(v){ return String(v==null?'':v).replace(/\s+/g,'').trim(); }
-function isValidPcts(v){ return normPcts(v).length > 0; }
-const PCTS_ERR = 'PCTS ID खाली नहीं हो सकती। (अंकों की संख्या पर कोई सीमा नहीं है।)';
-
-/* किसी केस के जोखिम फ्लैग — कार्ड पर दिखाने हेतु */
-function caseFlagsHTML(c, limit){
-  const cats = (c.riskCategories||[]).filter(Boolean);
-  if(!cats.length) return '';
-  const max = limit || 3;
-  const shown = cats.slice(0, max).map(x=>`<span class="miniflag">🚩 ${esc(x)}</span>`).join('');
-  const more = cats.length > max ? `<span class="miniflag" style="background:#F1EAE6;border-color:#E0D5CE;color:#7a6c6c;">+${cats.length-max} और</span>` : '';
-  return `<div class="caseflags">${shown}${more}</div>`;
-}
 
 const PLATFORM_OPTIONS = [
   "MCHN दिवस (सामुदायिक)","PMSMA (सुविधा ANC दिवस)","नियमित ANC (सुविधा)","गृह भ्रमण (ASHA/ANM)",
@@ -531,6 +395,71 @@ const DELIVERY_OUTCOME_OPTIONS = ["जीवित (Alive)","मृत जन्
 const HBNC_DAYS = [0,3,7,14,21,28,42];
 const HBNC_MOTHER_STATUS_OPTIONS = ["सामान्य","असामान्य","रेफर करने योग्य","मातृ मृत्यु"];
 const HBNC_BABY_STATUS_OPTIONS = ["सामान्य","असामान्य","रेफर करने योग्य","शिशु मृत्यु"];
+
+/* ---- दिनांक प्रारूप: भंडारण हमेशा ISO (yyyy-mm-dd) में, प्रदर्शन/एंट्री dd/mm/yyyy में ---- */
+function pad2(n){ return String(n).padStart(2,'0'); }
+function fmtDateDMY(iso){
+  if(!iso) return '';
+  const m = String(iso).trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return iso;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+function parseDMYToISO(s){
+  if(!s) return '';
+  const str = String(s).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(str)) return str; // पहले से ISO प्रारूप में हो तो जस का तस
+  const m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if(!m) return '';
+  const dd = pad2(m[1]), mm = pad2(m[2]), yyyy = m[3];
+  return `${yyyy}-${mm}-${dd}`;
+}
+function autoSlashDate(el){
+  let v = el.value.replace(/[^\d]/g,'');
+  if(v.length>8) v = v.slice(0,8);
+  let out = v;
+  if(v.length>=5) out = v.slice(0,2)+'/'+v.slice(2,4)+'/'+v.slice(4);
+  else if(v.length>=3) out = v.slice(0,2)+'/'+v.slice(2);
+  el.value = out;
+}
+
+/* ---- EDD (संभावित प्रसव तिथि) आधारित फ़िल्टर — डैशबोर्ड, सूची, रिपोर्ट में साझा ---- */
+function eddMonthDiff(edd){
+  if(!edd) return null;
+  const d = new Date(edd);
+  if(isNaN(d)) return null;
+  const now = new Date();
+  return (d.getFullYear()-now.getFullYear())*12 + (d.getMonth()-now.getMonth());
+}
+function matchesEDDFilter(c, filterVal){
+  if(!filterVal) return true;
+  const diff = eddMonthDiff(c.edd);
+  if(diff===null) return false;
+  if(filterVal==='this') return diff===0;
+  if(filterVal==='next') return diff===1;
+  if(filterVal==='thisnext') return diff===0 || diff===1;
+  return true;
+}
+
+/* ---- प्रसव पश्चात HBNC — अगली देय HBNC विज़िट स्वतः निकालना ---- */
+function getNextHBNCDue(c){
+  if(!c.deliveryDate) return null;
+  const base = new Date(c.deliveryDate);
+  if(isNaN(base)) return null;
+  const visits = c.hbncVisits || [];
+  for(const day of HBNC_DAYS){
+    const v = visits.find(x=>x.day===day);
+    if(!v || !v.date){
+      const due = new Date(base);
+      due.setDate(due.getDate()+day);
+      return { day, dueDateISO: due.toISOString().slice(0,10) };
+    }
+  }
+  return null; // सभी 7 HBNC भ्रमण पूर्ण
+}
+function getDueDateForSort(c){
+  if(c.deliveryDate){ const hb = getNextHBNCDue(c); return hb ? hb.dueDateISO : null; }
+  return c.nextDueDate || null;
+}
 
 // सभी HRP जोखिम श्रेणियों में सामान्यतः दी जाने वाली संभावित सेवाएं — किसी भी संस्थान/भूमिका द्वारा प्रविष्टि हेतु
 const SERVICE_OPTIONS = [
@@ -563,7 +492,6 @@ let activeCaseId = null;
 let unsubCases = null, unsubUsers = null;
 let unsubAnyService = null;
 let anyServiceCases = [];   // "सेवा एंट्री (किसी भी संस्थान पर)" टैब हेतु — पूरे ज़िले के सभी HRP केस, real-time
-let activeTab = 'dashboard'; // वर्तमान में सक्रिय टैब — केस विवरण मोडल में टैब-विशिष्ट व्यवहार तय करने हेतु
 
 /* ================= LOGIN ================= */
 function fillBlockSelects(){
@@ -625,7 +553,6 @@ auth.onAuthStateChanged(async (user)=>{
 function tabsForRole(role){
   const base = [['dashboard','डैशबोर्ड'],['list','HRP सूची']];
   if(['anm','facility','block','district','admin'].includes(role)) base.push(['anyservice','सेवा एंट्री (किसी भी संस्थान पर)']);
-  if(['facility','block','district','admin'].includes(role)) base.push(['dailyreport','दैनिक सेवा रिपोर्ट']);
   if(['asha','anm','facility','block','district','admin'].includes(role)) base.push(['register','नया पंजीकरण']);
   base.push(['mypass','मेरा पासवर्ड']);
   if(role==='admin') base.push(['users','उपयोगकर्ता']);
@@ -660,23 +587,18 @@ function enterApp(){
       : '';
   }
   listenCases();
-  startAnyServiceListener(); // "HRP सूची" व "सेवा एंट्री" — दोनों टैब में पूरे ज़िले के HRP दिखाने हेतु, लॉगिन के साथ ही शुरू
   if(currentUser.role==='admin') listenUsers();
   const frBtn = document.getElementById('fullReportBtn');
   if(frBtn) frBtn.style.display = currentUser.role==='admin' ? 'inline-block' : 'none';
-  selectMode = false; selectedCaseIds.clear();
-  initAdminBulkUI();
 }
 function switchTab(name){
-  activeTab = name;
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
-  ['dashboard','list','anyservice','dailyreport','register','mypass','users'].forEach(t=>{
+  ['dashboard','list','anyservice','register','mypass','users'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('hidden', t!==name);
   });
   if(name==='dashboard') renderDashboard();
   if(name==='list') renderCaseList();
-  if(name==='anyservice') renderAnyServiceList();
-  if(name==='dailyreport') runDailyServiceReport();
+  if(name==='anyservice'){ startAnyServiceListener(); } else { stopAnyServiceListener(); }
 }
 function toggleUserScopeFields(){
   const role = document.getElementById('nu_role').value;
@@ -714,283 +636,91 @@ function listenUsers(){
 /* ================= DASHBOARD ================= */
 function daysBetween(a,b){ return Math.floor((b-a)/(1000*60*60*24)); }
 function isOverdue(c){
+  if(c.deliveryDate){
+    const hb = getNextHBNCDue(c);
+    return hb ? (new Date(hb.dueDateISO) < new Date(new Date().toDateString())) : false;
+  }
   if(c.status!=='active' || !c.nextDueDate) return false;
   return new Date(c.nextDueDate) < new Date(new Date().toDateString());
 }
 function isDueSoon(c){
+  if(c.deliveryDate){
+    const hb = getNextHBNCDue(c);
+    if(!hb) return false;
+    const d = daysBetween(new Date(new Date().toDateString()), new Date(hb.dueDateISO));
+    return d>=0 && d<=3;
+  }
   if(c.status!=='active' || !c.nextDueDate) return false;
   const d = daysBetween(new Date(new Date().toDateString()), new Date(c.nextDueDate));
   return d>=0 && d<=3;
 }
-function populateDashboardFilters(){
-  const blockSel = document.getElementById('db_block');
-  const curBlock = blockSel.value;
-  const blocks = Array.from(new Set(allCases.map(c=>c.block).filter(Boolean))).sort();
-  blockSel.innerHTML = '<option value="">सभी ब्लॉक</option>' + blocks.map(b=>`<option value="${esc(b)}" ${b===curBlock?'selected':''}>${esc(b)}</option>`).join('');
-}
-function onDbBlockChange(){
-  const block = document.getElementById('db_block').value;
-  const facSel = document.getElementById('db_facility');
-  const curFac = facSel.value;
-  const facilities = Array.from(new Set(allCases.filter(c=>!block || c.block===block).map(c=>c.facility).filter(Boolean))).sort();
-  facSel.innerHTML = '<option value="">सभी सुविधाएं</option>' + facilities.map(f=>`<option value="${esc(f)}" ${f===curFac?'selected':''}>${esc(f)}</option>`).join('');
-  if(!facilities.includes(curFac)) facSel.value = '';
-  renderDashboard();
-}
 function renderDashboard(){
-  populateDashboardFilters();
-  const blockF = document.getElementById('db_block').value;
-  const facF = document.getElementById('db_facility').value;
-  const scoped = allCases.filter(c => (!blockF || c.block===blockF) && (!facF || c.facility===facF));
-
-  const active = scoped.filter(c=>c.status==='active');
-  const red = active; // नीति: सभी सक्रिय HRP उच्च जोखिम माने जाते हैं
-  const overdue = active.filter(isOverdue);
-  const delivered = scoped.filter(c=>c.status==='delivered');
-  const referred = scoped.filter(c=>c.status==='referred');
-  const maternalDeaths = scoped.filter(c=>c.status==='maternal_death');
+  const active = allCases.filter(c=>c.status==='active');
+  const red = active.filter(c=>c.riskLevel==='red');
+  const overdue = allCases.filter(isOverdue);
+  const delivered = allCases.filter(c=>c.status==='delivered');
+  const referred = allCases.filter(c=>c.status==='referred');
+  const upcomingDeliveries = allCases
+    .filter(c=> (c.status==='active'||c.status==='referred') && matchesEDDFilter(c,'thisnext'))
+    .sort((a,b)=> new Date(a.edd) - new Date(b.edd));
   document.getElementById('statRow').innerHTML = `
     <div class="statcard maroon"><div class="num">${active.length}</div><div class="lbl">सक्रिय HRP केस</div></div>
-    <div class="statcard red"><div class="num">${red.length}</div><div class="lbl">🚩 उच्च जोखिम (सभी HRP)</div></div>
+    <div class="statcard red"><div class="num">${red.length}</div><div class="lbl">उच्च जोखिम (Red)</div></div>
     <div class="statcard amber"><div class="num">${overdue.length}</div><div class="lbl">अनुवर्ती लंबित</div></div>
     <div class="statcard blue"><div class="num">${referred.length}</div><div class="lbl">रेफर किए गए</div></div>
     <div class="statcard green"><div class="num">${delivered.length}</div><div class="lbl">प्रसव / प्रसव हो चुका</div></div>
-    <div class="statcard red"><div class="num">${maternalDeaths.length}</div><div class="lbl">मातृ मृत्यु</div></div>
   `;
-  const list = overdue.sort((a,b)=> new Date(a.nextDueDate) - new Date(b.nextDueDate));
+  const list = overdue.sort((a,b)=> new Date(getDueDateForSort(a)||'2999-12-31') - new Date(getDueDateForSort(b)||'2999-12-31'));
   document.getElementById('overdueList').innerHTML = list.length ? list.map(caseCardHTML).join('') :
     `<div class="emptynote">कोई अनुवर्ती लंबित नहीं है।</div>`;
-
-  // जोखिम फ्लैग — सभी HRP श्रेणियाँ फ्लैग के रूप में (allCases पहले से ही भूमिका अनुसार scoped है)
-  const catCounts = {};
-  RISK_CATEGORIES.forEach(cat=>{ catCounts[cat] = 0; });
-  let uncategorised = 0;
-  active.forEach(c=>{
-    const cats = (c.riskCategories||[]).filter(Boolean);
-    if(!cats.length) uncategorised++;
-    cats.forEach(cat=>{ if(catCounts[cat]!==undefined) catCounts[cat]++; });
-  });
-  const showZero = document.getElementById('db_showZeroFlags')?.checked;
-  const entries = RISK_CATEGORIES.map(cat=>[cat, catCounts[cat]])
-    .filter(([,n])=> showZero || n>0)
-    .sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0],'hi'));
-  const catEl = document.getElementById('categoryStats');
-  if(catEl){
-    if(!entries.length && !uncategorised){
-      catEl.innerHTML = `<div class="emptynote">अभी किसी सक्रिय केस पर कोई जोखिम फ्लैग दर्ज नहीं है।</div>`;
-    }else{
-      const flags = entries.map(([cat,n])=>
-        `<div class="flagitem ${n?'':'zero'}" title="इस फ्लैग के केस देखें" data-cat="${esc(cat)}" onclick="openFlagInList(this.dataset.cat)">
-           <span class="fico">🚩</span><span>${esc(cat)}</span><span class="fcnt">${n}</span>
-         </div>`).join('');
-      const noFlag = uncategorised
-        ? `<div class="flagitem zero" title="जिन केसों पर अभी कोई श्रेणी दर्ज नहीं है" onclick="switchTab('list')">
-             <span class="fico">⚪</span><span>कोई फ्लैग दर्ज नहीं</span><span class="fcnt">${uncategorised}</span>
-           </div>` : '';
-      catEl.innerHTML = flags + noFlag;
-    }
-  }
-}
-/* डैशबोर्ड के फ्लैग पर क्लिक → उसी श्रेणी के केस "HRP सूची" टैब में */
-function openFlagInList(cat){
-  switchTab('list');
-  const sel = document.getElementById('f_flag');
-  if(sel){ sel.value = cat; }
-  const st = document.getElementById('f_status');
-  if(st) st.value = 'active';
-  renderCaseList();
-  window.scrollTo({top:0, behavior:'smooth'});
+  const udEl = document.getElementById('upcomingDeliveryList');
+  if(udEl) udEl.innerHTML = upcomingDeliveries.length ? upcomingDeliveries.map(caseCardHTML).join('') :
+    `<div class="emptynote">इस/अगले माह में EDD अनुसार कोई संभावित प्रसव दर्ज नहीं है।</div>`;
 }
 
 /* ================= CASE LIST ================= */
 function caseCardHTML(c){
   const overdue = isOverdue(c), dueSoon = isDueSoon(c);
-  const statusBadge = {
-    active: overdue ? `<span class="badge red">अनुवर्ती लंबित</span>` : dueSoon ? `<span class="badge amber">शीघ्र देय</span>` : `<span class="badge green">सामान्य</span>`,
-    delivered: `<span class="badge blue">प्रसव / प्रसव हो चुका</span>`,
-    maternal_death: `<span class="badge red">मातृ मृत्यु</span>`,
-    referred: `<span class="badge blue">रेफर किया गया</span>`,
-    ltfu: `<span class="badge gray">संपर्क में नहीं</span>`,
-    closed: `<span class="badge gray">बंद</span>`
-  }[c.status] || '';
-  const riskBadge = HIGH_RISK_BADGE; // सभी HRP उच्च जोखिम
-  const pickable = selectMode && activeTab==='list' && currentUser && currentUser.role==='admin';
-  const picked = selectedCaseIds.has(c.id);
-  const pickBox = pickable
-    ? `<input type="checkbox" class="pickbox" ${picked?'checked':''} onclick="event.stopPropagation();toggleCaseSelect('${c.id}')">`
-    : '';
-  const onClick = pickable ? `toggleCaseSelect('${c.id}')` : `openCase('${c.id}')`;
-  return `<div class="casecard risk-red ${picked?'picked':''}" onclick="${onClick}">
-    <div class="nm">${pickBox}${esc(c.name)} <span class="small">(${c.age||'-'})</span></div>
+  const hbncDue = c.deliveryDate ? getNextHBNCDue(c) : null;
+  let statusBadge;
+  if(c.status==='active'){
+    statusBadge = overdue ? `<span class="badge red">अनुवर्ती लंबित</span>` : dueSoon ? `<span class="badge amber">शीघ्र देय</span>` : `<span class="badge green">सामान्य</span>`;
+  }else if(c.status==='delivered'){
+    statusBadge = overdue ? `<span class="badge red">HBNC लंबित</span>` : dueSoon ? `<span class="badge amber">HBNC शीघ्र देय</span>` : `<span class="badge blue">प्रसव / प्रसव हो चुका</span>`;
+  }else{
+    statusBadge = {referred:'<span class="badge blue">रेफर किया गया</span>', ltfu:'<span class="badge gray">संपर्क में नहीं</span>', closed:'<span class="badge gray">बंद</span>'}[c.status] || '';
+  }
+  const riskBadge = {red:'<span class="badge red">उच्च जोखिम</span>', yellow:'<span class="badge amber">मध्यम जोखिम</span>', green:'<span class="badge green">निम्न जोखिम</span>'}[c.riskLevel]||'';
+  const dueLine = hbncDue
+    ? `अगला HBNC: दिन ${hbncDue.day} (${fmtDateDMY(hbncDue.dueDateISO)})`
+    : (c.deliveryDate ? 'सभी HBNC भ्रमण पूर्ण' : `अगली देय: ${fmtDateDMY(c.nextDueDate)||'—'}`);
+  return `<div class="casecard risk-${c.riskLevel}" onclick="openCase('${c.id}')">
+    <div class="nm">${esc(c.name)} <span class="small">(${c.age||'-'})</span></div>
     <div class="small" style="font-family:'Roboto Mono',monospace;color:#8a7a7a;">PCTS: ${esc(c.pctsId||'—')}</div>
     <div class="meta">${esc(c.village||'')} · ${esc(c.block||'')} · ${esc(c.facility||'')}</div>
-    <div class="meta">EDD: ${c.edd||'—'} · अगली देय: ${c.nextDueDate||'—'}</div>
+    <div class="meta">EDD: ${fmtDateDMY(c.edd)||'—'} · ${dueLine}</div>
     <div class="badges">${riskBadge}${statusBadge}</div>
-    ${caseFlagsHTML(c)}
   </div>`;
 }
 function renderCaseList(){
-  // ध्यान दें: यह टैब ("HRP सूची") जानबूझकर पूरे ज़िले का डेटा (anyServiceCases) दिखाता है,
-  // ताकि उपयोगकर्ता ज़रूरत पड़ने पर किसी भी HRP को यहीं से देख/खोज सके — जबकि डैशबोर्ड पर
-  // आंकड़े (allCases) उपयोगकर्ता के अपने क्षेत्र तक ही सीमित रहते हैं।
   const search = (document.getElementById('f_search')?.value||'').toLowerCase();
-  const flagF = document.getElementById('f_flag')?.value || '';
+  const riskF = document.getElementById('f_risk')?.value;
   const statusF = document.getElementById('f_status')?.value;
-  let list = anyServiceCases.filter(c=>{
-    if(flagF && !(c.riskCategories||[]).includes(flagF)) return false;
+  const eddF = document.getElementById('f_edd')?.value;
+  let list = allCases.filter(c=>{
+    if(riskF && c.riskLevel!==riskF) return false;
     if(statusF && c.status!==statusF) return false;
+    if(!statusF && !riskF && document.getElementById('f_status') && document.getElementById('f_status').value==='active' && c.status!=='active') return false;
+    if(!matchesEDDFilter(c, eddF)) return false;
     if(search && !((c.name||'').toLowerCase().includes(search) || (c.village||'').toLowerCase().includes(search) || (c.pctsId||'').includes(search))) return false;
     return true;
   });
-  // सभी केस उच्च जोखिम हैं — इसलिए फ्लैग की संख्या अधिक हो, वह ऊपर
-  list.sort((a,b)=> ((b.riskCategories||[]).length - (a.riskCategories||[]).length)
-                 || (a.name||'').localeCompare(b.name||'','hi'));
-  lastFilteredCases = list;
+  list.sort((a,b)=>{
+    const order = {red:0,yellow:1,green:2};
+    return (order[a.riskLevel]??3) - (order[b.riskLevel]??3);
+  });
   const el = document.getElementById('caseList');
   if(el) el.innerHTML = list.length ? list.map(caseCardHTML).join('') : `<div class="emptynote">कोई केस नहीं मिला।</div>`;
-  updateSelCount();
-}
-
-/* ================= ADMIN: बल्क HRP हटाना ================= */
-let selectMode = false;
-let selectedCaseIds = new Set();
-let lastFilteredCases = [];
-
-function initAdminBulkUI(){
-  const bar = document.getElementById('listAdminBar');
-  if(!bar) return;
-  const isAdmin = currentUser && currentUser.role==='admin';
-  bar.classList.toggle('hidden', !isAdmin);
-  // जोखिम फ्लैग फ़िल्टर भरें
-  const fsel = document.getElementById('f_flag');
-  if(fsel && fsel.options.length<=1){
-    fsel.innerHTML = '<option value="">सभी जोखिम फ्लैग (श्रेणियाँ)</option>' +
-      RISK_CATEGORIES.map(c=>`<option value="${esc(c)}">🚩 ${esc(c)}</option>`).join('');
-  }
-  if(isAdmin){
-    const bsel = document.getElementById('bd_block');
-    if(bsel && bsel.options.length<=1){
-      bsel.innerHTML = '<option value="">— ब्लॉक चुनें —</option>' + BLOCKS.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
-      bsel.onchange = ()=>{
-        const blk = bsel.value;
-        const facs = Array.from(new Set(anyServiceCases.filter(c=>!blk || c.block===blk).map(c=>c.facility).filter(Boolean))).sort();
-        const fs = document.getElementById('bd_facility');
-        fs.innerHTML = '<option value="">सभी सुविधाएं</option>' + facs.map(f=>`<option value="${esc(f)}">${esc(f)}</option>`).join('');
-      };
-    }
-  }
-}
-function toggleSelectMode(){
-  selectMode = !selectMode;
-  if(!selectMode) selectedCaseIds.clear();
-  const btn = document.getElementById('selModeBtn');
-  if(btn) btn.textContent = selectMode ? '✖ चयन मोड बंद करें' : '☑ चयन मोड चालू करें';
-  renderCaseList();
-}
-function toggleCaseSelect(id){
-  if(selectedCaseIds.has(id)) selectedCaseIds.delete(id); else selectedCaseIds.add(id);
-  renderCaseList();
-}
-function selectAllFiltered(){
-  if(!selectMode) toggleSelectMode();
-  lastFilteredCases.forEach(c=>selectedCaseIds.add(c.id));
-  renderCaseList();
-}
-function clearSelection(){
-  selectedCaseIds.clear();
-  renderCaseList();
-}
-function updateSelCount(){
-  const el = document.getElementById('selCount');
-  if(el) el.textContent = selectedCaseIds.size;
-}
-/* केसों को उनकी सभी विज़िट सहित बैच में हटाना (Firestore batch सीमा 500 ops) */
-async function deleteCasesByIds(ids, progEl){
-  let deleted = 0, failed = 0;
-  for(let i=0;i<ids.length;i++){
-    const id = ids[i];
-    try{
-      const visitsSnap = await db.collection('hrp_visits').where('caseId','==', id).get();
-      const docs = visitsSnap.docs;
-      for(let s=0; s<docs.length; s+=400){
-        const batch = db.batch();
-        docs.slice(s, s+400).forEach(d=>batch.delete(d.ref));
-        await batch.commit();
-      }
-      await db.collection('hrp_cases').doc(id).delete();
-      deleted++;
-    }catch(e){ console.error('bulk delete error', id, e); failed++; }
-    if(progEl) progEl.textContent = `हटाया जा रहा है... ${i+1}/${ids.length} (सफल: ${deleted}, असफल: ${failed})`;
-  }
-  return {deleted, failed};
-}
-function confirmBulkDelete(n, extra){
-  if(!n){ alert('हटाने हेतु कोई केस नहीं चुना गया है।'); return false; }
-  if(!confirm(`⚠ चेतावनी\n\n${n} HRP केस${extra?' ('+extra+')':''} तथा उनकी सभी फॉलो-अप/सेवा प्रविष्टियाँ स्थायी रूप से हटा दी जाएँगी।\nयह कार्य वापस नहीं लिया जा सकता।\n\nक्या आप आगे बढ़ना चाहते हैं?`)) return false;
-  const typed = prompt(`पुष्टि हेतु नीचे ठीक ${n} लिखें (हटाए जाने वाले केसों की संख्या):`);
-  if(String(typed||'').trim() !== String(n)){ alert('संख्या मेल नहीं खाई — कुछ भी नहीं हटाया गया।'); return false; }
-  return true;
-}
-async function bulkDeleteSelected(){
-  if(currentUser.role!=='admin') return;
-  const ids = Array.from(selectedCaseIds);
-  if(!confirmBulkDelete(ids.length, 'चयनित')) return;
-  const progEl = document.getElementById('bd_progress');
-  const r = await deleteCasesByIds(ids, progEl);
-  selectedCaseIds.clear();
-  progEl.textContent = `पूर्ण: ${r.deleted} केस हटाए गए${r.failed?`, ${r.failed} असफल`:''}।`;
-  renderCaseList();
-}
-async function bulkDeleteByPcts(){
-  if(currentUser.role!=='admin') return;
-  const raw = document.getElementById('bd_pcts').value || '';
-  const wanted = raw.split(/[\s,;\n\r\t]+/).map(normPcts).filter(Boolean);
-  if(!wanted.length){ alert('कृपया कम से कम एक PCTS ID लिखें।'); return; }
-  const set = new Set(wanted);
-  const matched = anyServiceCases.filter(c=> set.has(normPcts(c.pctsId)));
-  const notFound = wanted.filter(w=> !anyServiceCases.some(c=>normPcts(c.pctsId)===w));
-  const progEl = document.getElementById('bd_progress');
-  if(!matched.length){ progEl.textContent = `दी गई ${wanted.length} PCTS ID में से कोई भी केस नहीं मिला।`; return; }
-  if(!confirmBulkDelete(matched.length, 'PCTS ID सूची से')) return;
-  const r = await deleteCasesByIds(matched.map(c=>c.id), progEl);
-  progEl.textContent = `पूर्ण: ${r.deleted} केस हटाए गए${r.failed?`, ${r.failed} असफल`:''}।` +
-    (notFound.length ? `\nनहीं मिली PCTS ID (${notFound.length}): ${notFound.join(', ')}` : '');
-  document.getElementById('bd_pcts').value = '';
-  renderCaseList();
-}
-/* पुराने रिकॉर्ड को नई नीति (सभी HRP उच्च जोखिम) के अनुसार डेटाबेस में भी सुधारना */
-async function normalizeAllToHighRisk(){
-  if(currentUser.role!=='admin') return;
-  const progEl = document.getElementById('normProgress');
-  const pending = anyServiceCases.filter(c=> c.riskLevel !== RISK_LEVEL_FIXED);
-  if(!pending.length){ progEl.textContent = 'सभी केस पहले से ही उच्च जोखिम के रूप में दर्ज हैं — कुछ बदलने की आवश्यकता नहीं।'; return; }
-  if(!confirm(`${pending.length} पुराने केस का जोखिम स्तर "उच्च जोखिम (red)" कर दिया जाएगा। जारी रखें?`)) return;
-  let done=0;
-  for(let i=0;i<pending.length;i+=400){
-    const batch = db.batch();
-    pending.slice(i,i+400).forEach(c=> batch.update(db.collection('hrp_cases').doc(c.id), {riskLevel: RISK_LEVEL_FIXED}));
-    try{ await batch.commit(); done += Math.min(400, pending.length-i); }
-    catch(e){ progEl.textContent = 'त्रुटि: '+e.message; return; }
-    progEl.textContent = `सुधारा जा रहा है... ${done}/${pending.length}`;
-  }
-  progEl.textContent = `पूर्ण: ${done} केस अब उच्च जोखिम के रूप में दर्ज हैं।`;
-}
-
-async function bulkDeleteByScope(){
-  if(currentUser.role!=='admin') return;
-  const blk = document.getElementById('bd_block').value;
-  const fac = document.getElementById('bd_facility').value;
-  const st  = document.getElementById('bd_status').value;
-  if(!blk && !fac && !st){ alert('सुरक्षा हेतु कम से कम एक फ़िल्टर (ब्लॉक / सुविधा / स्थिति) चुनना आवश्यक है।'); return; }
-  const matched = anyServiceCases.filter(c=>
-    (!blk || c.block===blk) && (!fac || c.facility===fac) && (!st || c.status===st));
-  const label = [blk&&('ब्लॉक: '+blk), fac&&('सुविधा: '+fac), st&&('स्थिति: '+st)].filter(Boolean).join(', ');
-  const progEl = document.getElementById('bd_progress');
-  if(!matched.length){ progEl.textContent = 'इस क्षेत्र में कोई केस नहीं मिला।'; return; }
-  if(!confirmBulkDelete(matched.length, label)) return;
-  const r = await deleteCasesByIds(matched.map(c=>c.id), progEl);
-  progEl.textContent = `पूर्ण: ${r.deleted} केस हटाए गए${r.failed?`, ${r.failed} असफल`:''}। (${label})`;
-  renderCaseList();
 }
 
 /* ================= SERVICE ENTRY AT ANY FACILITY (district-wide search) ================= */
@@ -1003,7 +733,6 @@ function startAnyServiceListener(){
   unsubAnyService = db.collection('hrp_cases').onSnapshot(snap=>{
     anyServiceCases = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderAnyServiceList();
-    renderCaseList(); // "HRP सूची" टैब भी इसी पूरे-ज़िले वाले डेटा पर निर्भर है
   }, err=>{
     if(resEl) resEl.innerHTML = `<div class="emptynote">डेटा लोड करने में त्रुटि: ${esc(err.message)}</div>`;
   });
@@ -1016,6 +745,7 @@ function renderAnyServiceList(){
   if(!resEl) return;
   const raw = (document.getElementById('as_query').value||'').trim();
   const q = raw.toLowerCase();
+  const eddF = document.getElementById('as_edd')?.value;
   let list = anyServiceCases;
   if(q){
     list = list.filter(c=>
@@ -1026,6 +756,7 @@ function renderAnyServiceList(){
       (c.subcenter||'').toLowerCase().includes(q)
     );
   }
+  if(eddF) list = list.filter(c=>matchesEDDFilter(c, eddF));
   // सबसे नए पंजीकृत / अपलोड किए गए केस सबसे ऊपर
   list = [...list].sort((a,b)=>(b.registeredDate||'').localeCompare(a.registeredDate||''));
   resEl.innerHTML = list.length ? list.map(caseCardHTML).join('') : '<div class="emptynote">कोई HRP केस नहीं मिला।</div>';
@@ -1034,14 +765,16 @@ function renderAnyServiceList(){
 /* ================= REGISTER ================= */
 async function registerCase(){
   const errEl = document.getElementById('r_err'); errEl.textContent='';
-  const pctsId = normPcts(document.getElementById('r_pcts').value);
+  const pctsId = document.getElementById('r_pcts').value.trim();
   const name = document.getElementById('r_name').value.trim();
   const age = document.getElementById('r_age').value;
   const village = document.getElementById('r_village').value.trim();
   const block = document.getElementById('r_block').value;
   const subcenter = document.getElementById('r_subcenter').value.trim();
   const facility = document.getElementById('r_facility').value.trim();
-  if(!isValidPcts(pctsId)){ errEl.textContent = PCTS_ERR; return; }
+  if(!/^\d{15}$/.test(pctsId)){
+    errEl.textContent = 'PCTS ID ठीक 15 अंकों की संख्या होनी चाहिए।'; return;
+  }
   if(!name || !age || !village || !block || !subcenter || !facility){
     errEl.textContent = 'कृपया * चिह्नित सभी फ़ील्ड भरें।'; return;
   }
@@ -1060,10 +793,10 @@ async function registerCase(){
     ashaName: document.getElementById('r_asha').value.trim(),
     ashaPhone: document.getElementById('r_ashaphone').value.trim(),
     anmName: document.getElementById('r_anm').value.trim(),
-    lmp: document.getElementById('r_lmp').value, edd: document.getElementById('r_edd').value,
+    lmp: parseDMYToISO(document.getElementById('r_lmp').value), edd: parseDMYToISO(document.getElementById('r_edd').value),
     riskCategories: cats, notes: document.getElementById('r_notes').value.trim(),
-    riskLevel: RISK_LEVEL_FIXED, // नीति: सभी HRP उच्च जोखिम
-    nextDueDate: document.getElementById('r_nextdue').value,
+    riskLevel: document.getElementById('r_level').value,
+    nextDueDate: parseDMYToISO(document.getElementById('r_nextdue').value),
     status:'active', district:'Udaipur',
     registeredBy: currentUser.id, registeredByName: currentUser.name, registeredByRole: currentUser.role,
     registeredDate: new Date().toISOString().slice(0,10),
@@ -1073,7 +806,8 @@ async function registerCase(){
     await db.collection('hrp_cases').add(doc);
     document.querySelectorAll('#tab-register input, #tab-register textarea').forEach(i=>{ if(!['r_village','r_subcenter','r_facility'].includes(i.id) || !['asha','anm','facility'].includes(currentUser.role)) i.value=''; });
     document.querySelectorAll('#riskChips .chip.on').forEach(c=>c.classList.remove('on'));
-    alert('HRP केस सफलतापूर्वक दर्ज किया गया (उच्च जोखिम के रूप में)।');
+    document.getElementById('r_level').value='yellow';
+    alert('HRP केस सफलतापूर्वक दर्ज किया गया।');
     switchTab('list');
   }catch(e){ errEl.textContent = 'त्रुटि: '+e.message; }
 }
@@ -1089,44 +823,22 @@ function toISODateStr(v){
   if(m){ const [,d,mo,y]=m; return `${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`; }
   return s;
 }
-async function downloadCaseTemplate(){
-  const headers = ['PCTSID','Name','HusbandName','Age','GravidaParity','Village','Block','Subcenter','Facility','ASHAName','ASHAPhone','ANMName','LMP','EDD','RiskLevel','RiskCategories','Notes','NextDueDate'];
-  const sample = ['123456789012345','उदाहरण नाम','पति का नाम',24,'G2P1','गाँव का नाम','Girwa','उप-केंद्र नाम','PHC/CHC नाम','आशा नाम','9999999999','एएनएम नाम','2026-01-15','2026-10-20','red (सभी HRP उच्च जोखिम — यह कॉलम वैकल्पिक)','गंभीर एनीमिया- <7Hb; मलेरिया','टिप्पणी यहाँ लिखें','2026-09-20'];
+function downloadCaseTemplate(){
+  const headers = ['PCTSID','Name','HusbandName','Age','GravidaParity','Village','Block','Subcenter','Facility','ASHAName','ASHAPhone','ANMName','LMP','EDD','RiskLevel','RiskCategory1','RiskCategory2','RiskCategory3','RiskCategory4','RiskCategory5','Notes','NextDueDate'];
+  const sample = ['123456789012345','उदाहरण नाम','पति का नाम',24,'G2P1','गाँव का नाम','Girwa','उप-केंद्र नाम','PHC/CHC नाम','आशा नाम','9999999999','एएनएम नाम','15/01/2026','20/10/2026','yellow','गंभीर रक्ताल्पता (Hb<7) Severe Anemia','PIH / Pre-eclampsia / Eclampsia','','','','टिप्पणी यहाँ लिखें','20/09/2026'];
+  const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
+  ws['!cols'] = headers.map(()=>({wch:20}));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'HRP Cases');
 
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('HRP Cases');
-  ws.addRow(headers);
-  ws.addRow(sample);
-  ws.columns.forEach(col=>{ col.width = 22; });
+  // दूसरी शीट — मान्य जोखिम श्रेणियों की पूरी सूची, ताकि RiskCategory1..5 कॉलम में सही नाम कॉपी-पेस्ट किया जा सके
+  const catRows = [['इनमें से हर श्रेणी को कॉपी कर RiskCategory1, RiskCategory2 ... कॉलम में अलग-अलग पेस्ट करें (एक HRP में एक से अधिक श्रेणी हो सकती है)']]
+    .concat(RISK_CATEGORIES.map(c=>[c]));
+  const ws2 = XLSX.utils.aoa_to_sheet(catRows);
+  ws2['!cols'] = [{wch:60}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Risk Categories List');
 
-  // छुपी हुई संदर्भ शीट — जोखिम श्रेणियों की सूची, ड्रॉपडाउन हेतु
-  const listWs = wb.addWorksheet('जोखिम श्रेणी सूची');
-  RISK_CATEGORIES.forEach((cat,i)=>{ listWs.getCell(i+1, 1).value = cat; });
-  listWs.state = 'hidden';
-
-  // RiskCategories कॉलम (P) में ड्रॉपडाउन लिस्ट — फॉर्मेट/कॉलम संरचना पूर्ववत रहती है,
-  // केवल चयन आसान व त्रुटि-रहित बनाने हेतु सूची जोड़ी गई है।
-  // (warning शैली — एक से अधिक श्रेणी हेतु सूची में से एक चुनकर बाद में अर्धविराम ';' से अन्य श्रेणी जोड़ी जा सकती है)
-  const catColIndex = headers.indexOf('RiskCategories') + 1; // 1-based
-  for(let r=2;r<=1000;r++){
-    ws.getCell(r, catColIndex).dataValidation = {
-      type: 'list',
-      allowBlank: true,
-      formulae: [`'जोखिम श्रेणी सूची'!$A$1:$A$${RISK_CATEGORIES.length}`],
-      showErrorMessage: true,
-      errorStyle: 'warning',
-      errorTitle: 'जोखिम श्रेणी',
-      error: 'कृपया सूची में से चुनें। एक से अधिक श्रेणी हेतु सूची में से एक चुनें, फिर सेल में उसके बाद अर्धविराम ( ; ) लगाकर अगली श्रेणी का नाम भी टाइप करें।'
-    };
-  }
-
-  const buf = await wb.xlsx.writeBuffer();
-  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'HRP_Case_Bulk_Upload_Template.xlsx';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  XLSX.writeFile(wb, 'HRP_Case_Bulk_Upload_Template.xlsx');
 }
 async function bulkUploadCases(){
   const fileInput = document.getElementById('bulkCaseFile');
@@ -1144,9 +856,9 @@ async function bulkUploadCases(){
   for(let i=0;i<rows.length;i++){
     const row = rows[i];
     const rowNum = i+2; // 1 = header row
-    const pctsId = normPcts(row.PCTSID||row.PctsId||row.pctsid||row['PCTS ID']||'');
+    const pctsId = String(row.PCTSID||row.PctsId||row.pctsid||row['PCTS ID']||'').trim();
     const name = String(row.Name||row.name||'').trim();
-    if(!isValidPcts(pctsId)){ failed.push(`पंक्ति ${rowNum} (${name||'—'}) — PCTS ID खाली है`); continue; }
+    if(!/^\d{15}$/.test(pctsId)){ failed.push(`पंक्ति ${rowNum} (${name||'—'}) — PCTS ID 15 अंकों का नहीं है`); continue; }
     if(!name){ failed.push(`पंक्ति ${rowNum} — नाम खाली है`); continue; }
 
     let village = String(row.Village||row.village||'').trim();
@@ -1164,9 +876,17 @@ async function bulkUploadCases(){
     try{
       const dupSnap = await db.collection('hrp_cases').where('pctsId','==', pctsId).limit(1).get();
       if(!dupSnap.empty){ skipped++; continue; }
-      const riskLevel = RISK_LEVEL_FIXED; // नीति: Excel में कुछ भी लिखा हो, सभी HRP उच्च जोखिम
-      const catsRaw = String(row.RiskCategories||row.riskcategories||'').split(';').map(s=>s.trim()).filter(Boolean);
-      const riskCategories = catsRaw.filter(c=>RISK_CATEGORIES.includes(c));
+      const riskLevelRaw = String(row.RiskLevel||row.risklevel||'yellow').trim().toLowerCase();
+      const riskLevel = ['red','yellow','green'].includes(riskLevelRaw) ? riskLevelRaw : 'yellow';
+      // जोखिम श्रेणियाँ: नए टेम्पलेट के अलग-अलग कॉलम (RiskCategory1..5) — हर एक में एक श्रेणी चुनें
+      // + पुराने टेम्पलेट के अर्धविराम-विभाजित एकल कॉलम (RiskCategories) के साथ भी संगत
+      const catsRaw = [
+        row.RiskCategory1, row.riskcategory1, row.RiskCategory2, row.riskcategory2,
+        row.RiskCategory3, row.riskcategory3, row.RiskCategory4, row.riskcategory4,
+        row.RiskCategory5, row.riskcategory5,
+        ...String(row.RiskCategories||row.riskcategories||'').split(';')
+      ].map(v=>String(v||'').trim()).filter(Boolean);
+      const riskCategories = [...new Set(catsRaw)].filter(c=>RISK_CATEGORIES.includes(c));
       const doc = {
         pctsId, name,
         husbandName: String(row.HusbandName||row.husbandname||'').trim(),
@@ -1195,58 +915,6 @@ async function bulkUploadCases(){
   progEl.textContent = `पूर्ण: ${done} केस दर्ज हुए, ${skipped} पहले से मौजूद (छोड़ दिए), ${failed.length} असफल।` +
     (failed.length ? '\n\nअसफल:\n'+failed.join('\n') : '');
   fileInput.value = '';
-}
-
-/* प्रसव विवरण / Delivery Details व HBNC भ्रमण विवरण — दोनों जगह (सामान्य केस सूची व "सेवा एंट्री" टैब) उपयोग होने वाला साझा ब्लॉक */
-function deliveryHBNCBlockHTML(c, id){
-  return `
-    <div class="section-title">प्रसव विवरण / Delivery Details</div>
-    <div class="grid2">
-      <div class="field"><label>प्रसव का स्थान</label>
-        <select id="d_place" onchange="document.getElementById('d_facility_wrap').style.display = (this.value==='सरकारी चिकित्सा संस्थान पर'||this.value==='प्राइवेट चिकित्सा संस्थान पर') ? '' : 'none';">
-          <option value="">-- चयन करें --</option>
-          ${DELIVERY_PLACE_OPTIONS.map(p=>`<option value="${esc(p)}" ${c.deliveryPlace===p?'selected':''}>${esc(p)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field" id="d_facility_wrap" style="display:${(c.deliveryPlace==='सरकारी चिकित्सा संस्थान पर'||c.deliveryPlace==='प्राइवेट चिकित्सा संस्थान पर')?'':'none'};">
-        <label>संस्थान का नाम (यदि चिकित्सा संस्थान पर)</label>
-        <input id="d_facility" value="${esc(c.deliveryFacilityName||'')}" placeholder="संस्थान का नाम लिखें">
-      </div>
-      <div class="field"><label>प्रसव की दिनांक</label><input id="d_date" type="date" value="${c.deliveryDate||''}"></div>
-      <div class="field"><label>प्रसव का आउटकम</label>
-        <select id="d_outcome">
-          <option value="">-- चयन करें --</option>
-          ${DELIVERY_OUTCOME_OPTIONS.map(o=>`<option value="${esc(o)}" ${c.deliveryOutcome===o?'selected':''}>${esc(o)}</option>`).join('')}
-        </select>
-      </div>
-    </div>
-    <button class="btn small ghost" onclick="saveDeliveryDetails('${id}')">प्रसव विवरण सहेजें</button>
-
-    <div class="section-title">HBNC भ्रमण विवरण / Home Based Newborn Care (0, 3, 7, 14, 21, 28 व 42 वें दिन)</div>
-    <div class="tablewrap">
-      <table class="linelist" id="hbncTable">
-        <thead><tr><th>दिन</th><th>भ्रमण दिनांक</th><th>माँ की स्थिति</th><th>बच्चे की स्थिति</th></tr></thead>
-        <tbody>
-          ${HBNC_DAYS.map(day=>{
-            const hv = (c.hbncVisits||[]).find(x=>x.day===day) || {};
-            return `<tr>
-              <td>दिन ${day}</td>
-              <td><input type="date" id="hbnc_date_${day}" value="${hv.date||''}"></td>
-              <td><select id="hbnc_mother_${day}">
-                <option value="">--</option>
-                ${HBNC_MOTHER_STATUS_OPTIONS.map(s=>`<option value="${esc(s)}" ${hv.motherStatus===s?'selected':''}>${esc(s)}</option>`).join('')}
-              </select></td>
-              <td><select id="hbnc_baby_${day}">
-                <option value="">--</option>
-                ${HBNC_BABY_STATUS_OPTIONS.map(s=>`<option value="${esc(s)}" ${hv.babyStatus===s?'selected':''}>${esc(s)}</option>`).join('')}
-              </select></td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>
-    <button class="btn small ghost" style="margin-top:8px;" onclick="saveHBNCVisits('${id}')">HBNC विवरण सहेजें</button>
-  `;
 }
 
 /* ================= CASE DETAIL / TIMELINE ================= */
@@ -1295,13 +963,12 @@ async function openCase(id, silentRefresh){
       </div>
       <div>
         ${currentUser.canEditEntries?`<button class="btn small ghost" style="margin-inline-end:6px;" onclick="toggleEditCase()">✎ संपादित करें</button>`:''}
-        ${currentUser.role==='admin'?`<button class="btn small ghost" style="margin-inline-end:6px;color:#b00020;border-color:#b00020;" onclick="deleteCase('${id}')">🗑 केस हटाएं</button>`:''}
         <button onclick="closeModal()">✕</button>
       </div>
     </div>
     <div class="badges" style="margin-top:8px;">
-      ${ HIGH_RISK_BADGE }
-      ${ {active:'<span class="badge green">सक्रिय</span>',delivered:'<span class="badge blue">प्रसव / प्रसव हो चुका</span>',maternal_death:'<span class="badge red">मातृ मृत्यु</span>',referred:'<span class="badge blue">रेफर</span>',ltfu:'<span class="badge gray">संपर्क में नहीं</span>',closed:'<span class="badge gray">बंद</span>'}[c.status]||'' }
+      ${ {red:'<span class="badge red">उच्च जोखिम</span>',yellow:'<span class="badge amber">मध्यम जोखिम</span>',green:'<span class="badge green">निम्न जोखिम</span>'}[c.riskLevel]||'' }
+      ${ {active:'<span class="badge green">सक्रिय</span>',delivered:'<span class="badge blue">प्रसव / प्रसव हो चुका</span>',referred:'<span class="badge blue">रेफर</span>',ltfu:'<span class="badge gray">संपर्क में नहीं</span>',closed:'<span class="badge gray">बंद</span>'}[c.status]||'' }
     </div>
 
     <div id="viewDetailsBlock">
@@ -1310,8 +977,8 @@ async function openCase(id, silentRefresh){
       <div>गाँव: ${esc(c.village||'-')}</div><div>ब्लॉक: ${esc(c.block||'-')}</div>
       <div>उप-केंद्र: ${esc(c.subcenter||'-')}</div><div>सुविधा: ${esc(c.facility||'-')}</div>
       <div>ASHA: ${esc(c.ashaName||'-')} (${esc(c.ashaPhone||'-')})</div><div>ANM: ${esc(c.anmName||'-')}</div>
-      <div>LMP: ${c.lmp||'-'}</div><div>EDD: ${c.edd||'-'}</div>
-      <div>पंजीकृत: ${c.registeredDate||'-'} (${esc(c.registeredByName||'-')})</div><div>अगली देय तिथि: ${c.nextDueDate||'-'}</div>
+      <div>LMP: ${fmtDateDMY(c.lmp)||'-'}</div><div>EDD: ${fmtDateDMY(c.edd)||'-'}</div>
+      <div>पंजीकृत: ${fmtDateDMY(c.registeredDate)||'-'} (${esc(c.registeredByName||'-')})</div><div>अगली देय तिथि: ${fmtDateDMY(c.nextDueDate)||'-'}</div>
     </div>
     <div class="section-title">जोखिम श्रेणियाँ</div>
     <div>${riskChipsHTML}</div>
@@ -1321,7 +988,7 @@ async function openCase(id, silentRefresh){
     <div id="editDetailsBlock" class="hidden">
       <div class="section-title">मूल विवरण संपादित करें / Edit Details</div>
       <div class="grid2">
-        <div class="field"><label>PCTS ID (कितने भी अंक)</label><input id="e_pcts" value="${esc(c.pctsId||'')}"></div>
+        <div class="field"><label>PCTS ID</label><input id="e_pcts" maxlength="15" value="${esc(c.pctsId||'')}"></div>
         <div class="field"><label>महिला का नाम</label><input id="e_name" value="${esc(c.name||'')}"></div>
         <div class="field"><label>पति का नाम</label><input id="e_husband" value="${esc(c.husbandName||'')}"></div>
         <div class="field"><label>आयु</label><input id="e_age" type="number" value="${c.age||''}"></div>
@@ -1332,8 +999,8 @@ async function openCase(id, silentRefresh){
         <div class="field"><label>ASHA नाम</label><input id="e_asha" value="${esc(c.ashaName||'')}"></div>
         <div class="field"><label>ASHA मोबाइल</label><input id="e_ashaphone" value="${esc(c.ashaPhone||'')}"></div>
         <div class="field"><label>ANM नाम</label><input id="e_anm" value="${esc(c.anmName||'')}"></div>
-        <div class="field"><label>LMP</label><input id="e_lmp" type="date" value="${c.lmp||''}"></div>
-        <div class="field"><label>EDD</label><input id="e_edd" type="date" value="${c.edd||''}"></div>
+        <div class="field"><label>LMP</label><input id="e_lmp" type="text" placeholder="dd/mm/yyyy" maxlength="10" oninput="autoSlashDate(this)" value="${fmtDateDMY(c.lmp)}"></div>
+        <div class="field"><label>EDD</label><input id="e_edd" type="text" placeholder="dd/mm/yyyy" maxlength="10" oninput="autoSlashDate(this)" value="${fmtDateDMY(c.edd)}"></div>
       </div>
       <div class="field"><label>टिप्पणी / Notes</label><textarea id="e_notes">${esc(c.notes||'')}</textarea></div>
       <div class="footRow">
@@ -1346,13 +1013,16 @@ async function openCase(id, silentRefresh){
     <div class="section-title">स्थिति अपडेट करें / Update Status</div>
     <div class="grid2">
       <div class="field"><label>जोखिम स्तर</label>
-        <div class="badge red" style="display:inline-block;padding:7px 12px;font-size:13px;">🚩 उच्च जोखिम — सभी HRP हेतु निर्धारित</div>
+        <select id="m_level">
+          <option value="red" ${c.riskLevel==='red'?'selected':''}>उच्च (Red)</option>
+          <option value="yellow" ${c.riskLevel==='yellow'?'selected':''}>मध्यम (Yellow)</option>
+          <option value="green" ${c.riskLevel==='green'?'selected':''}>निम्न (Green)</option>
+        </select>
       </div>
       <div class="field"><label>केस स्थिति</label>
         <select id="m_status">
           <option value="active" ${c.status==='active'?'selected':''}>सक्रिय</option>
           <option value="delivered" ${c.status==='delivered'?'selected':''}>प्रसव / प्रसव हो चुका</option>
-          <option value="maternal_death" ${c.status==='maternal_death'?'selected':''}>मातृ मृत्यु</option>
           <option value="referred" ${c.status==='referred'?'selected':''}>रेफर किया गया</option>
           <option value="ltfu" ${c.status==='ltfu'?'selected':''}>संपर्क में नहीं (LTFU)</option>
           <option value="closed" ${c.status==='closed'?'selected':''}>बंद</option>
@@ -1361,11 +1031,56 @@ async function openCase(id, silentRefresh){
     </div>
     <button class="btn small ghost" onclick="updateCaseStatus('${id}')">स्थिति सहेजें</button>
 
-    ${activeTab==='anyservice' ? '' : deliveryHBNCBlockHTML(c, id)}
+    <div class="section-title">प्रसव विवरण / Delivery Details</div>
+    <div class="grid2">
+      <div class="field"><label>प्रसव का स्थान</label>
+        <select id="d_place" onchange="document.getElementById('d_facility_wrap').style.display = (this.value==='सरकारी चिकित्सा संस्थान पर'||this.value==='प्राइवेट चिकित्सा संस्थान पर') ? '' : 'none';">
+          <option value="">-- चयन करें --</option>
+          ${DELIVERY_PLACE_OPTIONS.map(p=>`<option value="${esc(p)}" ${c.deliveryPlace===p?'selected':''}>${esc(p)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field" id="d_facility_wrap" style="display:${(c.deliveryPlace==='सरकारी चिकित्सा संस्थान पर'||c.deliveryPlace==='प्राइवेट चिकित्सा संस्थान पर')?'':'none'};">
+        <label>संस्थान का नाम (यदि चिकित्सा संस्थान पर)</label>
+        <input id="d_facility" value="${esc(c.deliveryFacilityName||'')}" placeholder="संस्थान का नाम लिखें">
+      </div>
+      <div class="field"><label>प्रसव की दिनांक</label><input id="d_date" type="text" placeholder="dd/mm/yyyy" maxlength="10" oninput="autoSlashDate(this)" value="${fmtDateDMY(c.deliveryDate)}"></div>
+      <div class="field"><label>प्रसव का आउटकम</label>
+        <select id="d_outcome">
+          <option value="">-- चयन करें --</option>
+          ${DELIVERY_OUTCOME_OPTIONS.map(o=>`<option value="${esc(o)}" ${c.deliveryOutcome===o?'selected':''}>${esc(o)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <button class="btn small ghost" onclick="saveDeliveryDetails('${id}')">प्रसव विवरण सहेजें</button>
+
+    <div class="section-title">HBNC भ्रमण विवरण / Home Based Newborn Care (0, 3, 7, 14, 21, 28 व 42 वें दिन)</div>
+    <div class="tablewrap">
+      <table class="linelist" id="hbncTable">
+        <thead><tr><th>दिन</th><th>भ्रमण दिनांक</th><th>माँ की स्थिति</th><th>बच्चे की स्थिति</th></tr></thead>
+        <tbody>
+          ${HBNC_DAYS.map(day=>{
+            const hv = (c.hbncVisits||[]).find(x=>x.day===day) || {};
+            return `<tr>
+              <td>दिन ${day}</td>
+              <td><input type="text" id="hbnc_date_${day}" placeholder="dd/mm/yyyy" maxlength="10" oninput="autoSlashDate(this)" value="${fmtDateDMY(hv.date)}"></td>
+              <td><select id="hbnc_mother_${day}">
+                <option value="">--</option>
+                ${HBNC_MOTHER_STATUS_OPTIONS.map(s=>`<option value="${esc(s)}" ${hv.motherStatus===s?'selected':''}>${esc(s)}</option>`).join('')}
+              </select></td>
+              <td><select id="hbnc_baby_${day}">
+                <option value="">--</option>
+                ${HBNC_BABY_STATUS_OPTIONS.map(s=>`<option value="${esc(s)}" ${hv.babyStatus===s?'selected':''}>${esc(s)}</option>`).join('')}
+              </select></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <button class="btn small ghost" style="margin-top:8px;" onclick="saveHBNCVisits('${id}')">HBNC विवरण सहेजें</button>
 
     <div class="section-title">नई अनुवर्ती प्रविष्टि जोड़ें / Add Follow-up Entry</div>
     <div class="grid2">
-      <div class="field"><label>दिनांक</label><input id="v_date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>दिनांक</label><input id="v_date" type="text" placeholder="dd/mm/yyyy" maxlength="10" oninput="autoSlashDate(this)" value="${fmtDateDMY(new Date().toISOString().slice(0,10))}"></div>
       <div class="field"><label>प्लेटफ़ॉर्म</label><select id="v_platform">${PLATFORM_OPTIONS.map(p=>`<option>${p}</option>`).join('')}</select></div>
       <div class="field"><label>BP</label><input id="v_bp" placeholder="जैसे 120/80"></div>
       <div class="field"><label>Hb (g/dl)</label><input id="v_hb" type="number" step="0.1"></div>
@@ -1391,7 +1106,7 @@ async function openCase(id, silentRefresh){
       <div class="field"><label>एम्बुलेंस उपयोग</label>
         <select id="v_ambulance"><option value="">कोई नहीं</option><option value="104">104 (प्रसव पूर्व)</option><option value="108">108 (आपातकाल)</option></select>
       </div>
-      <div class="field"><label>अगली अनुवर्ती तिथि</label><input id="v_nextdue" type="date"></div>
+      <div class="field"><label>अगली अनुवर्ती तिथि</label><input id="v_nextdue" type="text" placeholder="dd/mm/yyyy" maxlength="10" oninput="autoSlashDate(this)"></div>
     </div>
 
     ${currentUser.role==='asha' ? `
@@ -1418,14 +1133,12 @@ async function openCase(id, silentRefresh){
 
     <div class="footRow"><button class="btn" onclick="addVisit('${id}')">प्रविष्टि जोड़ें</button></div>
 
-    ${(activeTab==='anyservice' && (c.status==='delivered' || c.status==='maternal_death')) ? deliveryHBNCBlockHTML(c, id) : ''}
-
     <div class="section-title">टाइमलाइन / History (${visits.length})</div>
     <div class="timeline">
       ${visits.length ? visits.map(v=>`
         <div class="tlitem">
           <div class="plat">${esc(v.platform)}</div>
-          <div class="dt">${v.date}${v.ambulance?` · एम्बुलेंस ${v.ambulance}`:''}</div>
+          <div class="dt">${fmtDateDMY(v.date)}${v.ambulance?` · एम्बुलेंस ${v.ambulance}`:''}</div>
           ${v.servicesProvided&&v.servicesProvided.length?`<div class="txt"><b>दी गई सेवाएं:</b> ${v.servicesProvided.map(esc).join(', ')}</div>`:''}
           <div class="txt">${v.bp?`BP: ${esc(v.bp)} `:''}${v.hb?`Hb: ${v.hb} `:''}${v.sugar?`Sugar: ${esc(v.sugar)} `:''}${v.urineTest?`Urine: ${esc(v.urineTest)} `:''}${v.hiv?`HIV: ${esc(v.hiv)} `:''}${v.syphilis?`Syphilis: ${esc(v.syphilis)} `:''}${v.findings?`— ${esc(v.findings)}`:''}</div>
           ${(v.ivSucrose||v.fcm||v.bloodTransfusion)?`<div class="txt">${v.ivSucrose?`IV Sucrose: ${esc(v.ivSucrose)} `:''}${v.fcm?`FCM: ${esc(v.fcm)} `:''}${v.bloodTransfusion?`Blood Transfusion: ${esc(v.bloodTransfusion)}`:''}</div>`:''}
@@ -1445,24 +1158,10 @@ function toggleEditCase(){
   document.getElementById('viewDetailsBlock').classList.toggle('hidden');
   document.getElementById('editDetailsBlock').classList.toggle('hidden');
 }
-async function deleteCase(id){
-  const c = allCases.find(x=>x.id===id) || anyServiceCases.find(x=>x.id===id);
-  const label = c ? `${c.name} (PCTS: ${c.pctsId||'—'})` : 'यह केस';
-  if(!confirm(`क्या आप वाकई ${label} को स्थायी रूप से हटाना चाहते हैं? इसकी सभी फॉलो-अप/सेवा प्रविष्टियाँ भी हट जाएँगी। यह कार्य वापस नहीं लिया जा सकता।`)) return;
-  try{
-    const visitsSnap = await db.collection('hrp_visits').where('caseId','==', id).get();
-    const batch = db.batch();
-    visitsSnap.docs.forEach(d=> batch.delete(d.ref));
-    batch.delete(db.collection('hrp_cases').doc(id));
-    await batch.commit();
-    closeModal();
-    alert('केस सफलतापूर्वक हटा दिया गया।');
-  }catch(e){ alert('त्रुटि: '+e.message); }
-}
 async function saveCaseEdit(id){
   const errEl = document.getElementById('e_err'); errEl.textContent='';
-  const pctsId = normPcts(document.getElementById('e_pcts').value);
-  if(!isValidPcts(pctsId)){ errEl.textContent = PCTS_ERR; return; }
+  const pctsId = document.getElementById('e_pcts').value.trim();
+  if(!/^\d{15}$/.test(pctsId)){ errEl.textContent='PCTS ID ठीक 15 अंकों की संख्या होनी चाहिए।'; return; }
   const dupSnap = await db.collection('hrp_cases').where('pctsId','==', pctsId).get();
   if(dupSnap.docs.some(d=>d.id!==id)){ errEl.textContent='यह PCTS ID किसी और केस में पहले से मौजूद है।'; return; }
   const payload = {
@@ -1476,9 +1175,8 @@ async function saveCaseEdit(id){
     ashaName: document.getElementById('e_asha').value.trim(),
     ashaPhone: document.getElementById('e_ashaphone').value.trim(),
     anmName: document.getElementById('e_anm').value.trim(),
-    lmp: document.getElementById('e_lmp').value, edd: document.getElementById('e_edd').value,
+    lmp: parseDMYToISO(document.getElementById('e_lmp').value), edd: parseDMYToISO(document.getElementById('e_edd').value),
     notes: document.getElementById('e_notes').value.trim(),
-    riskLevel: RISK_LEVEL_FIXED,
     lastEditedBy: currentUser.name, lastEditedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
   try{
@@ -1488,9 +1186,10 @@ async function saveCaseEdit(id){
 }
 
 async function updateCaseStatus(id){
+  const level = document.getElementById('m_level').value;
   const status = document.getElementById('m_status').value;
   try{
-    await db.collection('hrp_cases').doc(id).update({riskLevel: RISK_LEVEL_FIXED, status:status});
+    await db.collection('hrp_cases').doc(id).update({riskLevel:level, status:status});
     openCase(id);
   }catch(e){
     console.error('updateCaseStatus error:', e);
@@ -1501,7 +1200,7 @@ async function saveDeliveryDetails(id){
   const place = document.getElementById('d_place').value;
   const isFacilityDelivery = (place==='सरकारी चिकित्सा संस्थान पर' || place==='प्राइवेट चिकित्सा संस्थान पर');
   const facility = document.getElementById('d_facility').value.trim();
-  const date = document.getElementById('d_date').value;
+  const date = parseDMYToISO(document.getElementById('d_date').value);
   const outcome = document.getElementById('d_outcome').value;
   try{
     await db.collection('hrp_cases').doc(id).update({
@@ -1519,7 +1218,7 @@ async function saveDeliveryDetails(id){
 async function saveHBNCVisits(id){
   const hbncVisits = HBNC_DAYS.map(day=>({
     day,
-    date: document.getElementById('hbnc_date_'+day).value,
+    date: parseDMYToISO(document.getElementById('hbnc_date_'+day).value),
     motherStatus: document.getElementById('hbnc_mother_'+day).value,
     babyStatus: document.getElementById('hbnc_baby_'+day).value
   }));
@@ -1532,8 +1231,8 @@ async function saveHBNCVisits(id){
   }
 }
 async function addVisit(caseId){
-  const date = document.getElementById('v_date').value;
-  if(!date){ alert('दिनांक दर्ज करें।'); return; }
+  const date = parseDMYToISO(document.getElementById('v_date').value);
+  if(!date){ alert('कृपया दिनांक सही प्रारूप dd/mm/yyyy में भरें।'); return; }
   const doc = {
     caseId, date, platform: document.getElementById('v_platform').value,
     bp: document.getElementById('v_bp').value.trim(), hb: document.getElementById('v_hb').value ? Number(document.getElementById('v_hb').value) : null,
@@ -1561,7 +1260,7 @@ async function addVisit(caseId){
   }
   try{
     await db.collection('hrp_visits').add(doc);
-    const nextDue = document.getElementById('v_nextdue').value;
+    const nextDue = parseDMYToISO(document.getElementById('v_nextdue').value);
     const updatePayload = { lastContactDate: date };
     if(nextDue) updatePayload.nextDueDate = nextDue;
     await db.collection('hrp_cases').doc(caseId).update(updatePayload);
@@ -1702,8 +1401,10 @@ async function deleteUser(uid){
 
 /* ================= EXPORT ================= */
 function exportCSV(){
+  const eddF = document.getElementById('f_edd')?.value;
+  const cases = eddF ? allCases.filter(c=>matchesEDDFilter(c, eddF)) : allCases;
   const headers = ['PCTS ID','Name','Age','Village','Block','Subcentre','Facility','ASHA','ANM','LMP','EDD','RiskLevel','RiskCategories','Status','LastContact','NextDue','RegisteredBy','RegisteredDate'];
-  const rows = anyServiceCases.map(c=>[c.pctsId,c.name,c.age,c.village,c.block,c.subcenter,c.facility,c.ashaName,c.anmName,c.lmp,c.edd,riskOf(c),(c.riskCategories||[]).join('; '),c.status,c.lastContactDate,c.nextDueDate,c.registeredByName,c.registeredDate]);
+  const rows = cases.map(c=>[c.pctsId,c.name,c.age,c.village,c.block,c.subcenter,c.facility,c.ashaName,c.anmName,fmtDateDMY(c.lmp),fmtDateDMY(c.edd),c.riskLevel,(c.riskCategories||[]).join('; '),c.status,fmtDateDMY(c.lastContactDate),fmtDateDMY(c.nextDueDate),c.registeredByName,fmtDateDMY(c.registeredDate)]);
   const csv = [headers.join(',')].concat(rows.map(r=>r.map(v=>`"${(v??'').toString().replace(/"/g,'""')}"`).join(','))).join('\n');
   const blob = new Blob(["\ufeff"+csv], {type:'text/csv;charset=utf-8;'});
   const link = document.createElement('a');
@@ -1714,90 +1415,9 @@ function exportCSV(){
 
 function esc(s){ return (s??'').toString().replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
-/* ================= DAILY SERVICE REPORT (facility/block/district) ================= */
-let lastDailyReportRows = [];
-function populateDailyReportFilters(){
-  const blockSel = document.getElementById('dr_block');
-  const curBlock = blockSel.value;
-  const blocks = Array.from(new Set(allCases.map(c=>c.block).filter(Boolean))).sort();
-  blockSel.innerHTML = '<option value="">सभी ब्लॉक</option>' + blocks.map(b=>`<option value="${esc(b)}" ${b===curBlock?'selected':''}>${esc(b)}</option>`).join('');
-}
-function onDrBlockChange(){
-  const block = document.getElementById('dr_block').value;
-  const facSel = document.getElementById('dr_facility');
-  const curFac = facSel.value;
-  const facilities = Array.from(new Set(allCases.filter(c=>!block || c.block===block).map(c=>c.facility).filter(Boolean))).sort();
-  facSel.innerHTML = '<option value="">सभी सुविधाएं</option>' + facilities.map(f=>`<option value="${esc(f)}" ${f===curFac?'selected':''}>${esc(f)}</option>`).join('');
-  if(!facilities.includes(curFac)) facSel.value = '';
-  runDailyServiceReport();
-}
-async function runDailyServiceReport(){
-  const dateInput = document.getElementById('dr_date');
-  if(!dateInput.value) dateInput.value = new Date().toISOString().slice(0,10);
-  const date = dateInput.value;
-  populateDailyReportFilters();
-  const blockF = document.getElementById('dr_block').value;
-  const facF = document.getElementById('dr_facility').value;
-  const summaryEl = document.getElementById('dr_summary');
-  const tableEl = document.getElementById('dr_table');
-  summaryEl.textContent = 'लोड हो रहा है...';
-  tableEl.innerHTML = '';
-
-  // allCases पहले से ही भूमिका अनुसार scoped है (facility→अपनी facility, block→अपना block, district/admin→पूरा ज़िला)
-  // यहाँ ऊपर से ब्लॉक/सुविधा फ़िल्टर अतिरिक्त रूप से लगाया गया है
-  const scopedCases = allCases.filter(c => (!blockF || c.block===blockF) && (!facF || c.facility===facF));
-  const scopedIds = new Set(scopedCases.map(c=>c.id));
-  const caseById = {}; scopedCases.forEach(c=> caseById[c.id]=c);
-
-  let visitsSnap;
-  try{
-    visitsSnap = await db.collection('hrp_visits').where('date','==', date).get();
-  }catch(e){ summaryEl.textContent = 'त्रुटि: '+e.message; return; }
-
-  const platformsByCase = {};
-  visitsSnap.docs.forEach(d=>{
-    const v = d.data();
-    if(!scopedIds.has(v.caseId)) return; // यह केस हमारे क्षेत्र का नहीं
-    if(!platformsByCase[v.caseId]) platformsByCase[v.caseId] = [];
-    platformsByCase[v.caseId].push(v.platform||'—');
-  });
-
-  const rows = Object.keys(platformsByCase).map(caseId=>{
-    const c = caseById[caseId];
-    if(!c) return null;
-    return { c, platforms: platformsByCase[caseId] };
-  }).filter(Boolean);
-  rows.sort((a,b)=> (a.c.block||'').localeCompare(b.c.block||'') || (a.c.name||'').localeCompare(b.c.name||''));
-  lastDailyReportRows = rows;
-
-  let scopeLabel = {facility:'सुविधा: '+currentUser.facilityName, block:'ब्लॉक: '+currentUser.blockName, district:'संपूर्ण ज़िला', admin:'संपूर्ण ज़िला'}[currentUser.role] || '';
-  if(blockF || facF) scopeLabel = [blockF?('ब्लॉक: '+blockF):'', facF?('सुविधा: '+facF):''].filter(Boolean).join(' · ');
-  summaryEl.textContent = `दिनांक ${date} को सेवा प्राप्त करने वाली कुल HRP: ${rows.length}  (${scopeLabel})`;
-
-  if(!rows.length){ tableEl.innerHTML = '<tbody><tr><td>इस तारीख़ को इस क्षेत्र में किसी HRP को कोई सेवा दर्ज नहीं हुई।</td></tr></tbody>'; return; }
-
-  const riskLabel = {red:'उच्च (Red)'};
-  tableEl.innerHTML = `<thead><tr><th>PCTS ID</th><th>नाम</th><th>गाँव</th><th>ब्लॉक</th><th>होम सुविधा</th><th>जोखिम स्तर</th><th>आज दी गई सेवा (प्लेटफ़ॉर्म)</th></tr></thead>
-    <tbody>${rows.map(r=>`<tr onclick="openCase('${r.c.id}')" style="cursor:pointer;">
-      <td>${esc(r.c.pctsId||'—')}</td><td>${esc(r.c.name)}</td><td>${esc(r.c.village||'-')}</td><td>${esc(r.c.block||'-')}</td>
-      <td>${esc(r.c.facility||'-')}</td><td>${riskLabel[riskOf(r.c)]}</td><td>${esc(Array.from(new Set(r.platforms)).join('; '))}</td>
-    </tr>`).join('')}</tbody>`;
-}
-function exportDailyReportCSV(){
-  if(!lastDailyReportRows.length){ alert('पहले रिपोर्ट देखें बटन दबाएं।'); return; }
-  const date = document.getElementById('dr_date').value;
-  const headers = ['Date','PCTS ID','Name','Village','Block','HomeFacility','RiskLevel','PlatformsServicedToday'];
-  const csvRows = lastDailyReportRows.map(r=>[date,r.c.pctsId,r.c.name,r.c.village,r.c.block,r.c.facility,riskOf(r.c),Array.from(new Set(r.platforms)).join('; ')]);
-  const csv = [headers.join(',')].concat(csvRows.map(r=>r.map(v=>`"${(v??'').toString().replace(/"/g,'""')}"`).join(','))).join('\n');
-  const blob = new Blob(["\ufeff"+csv], {type:'text/csv;charset=utf-8;'});
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = 'HRP_Daily_Service_Report_'+date+'.csv';
-  link.click();
-}
-
 async function exportFullReportCSV(){
-  const headers = ['PCTS ID','Name','Village','Block','RiskLevel','Status','VisitDate','Platform','BP','Hb','Sugar','UrineTest','HIV','Syphilis','IVSucrose','FCM','BloodTransfusion','Findings','Action','Ambulance','EnteredBy','EnteredRole'];
+  const eddF = document.getElementById('f_edd')?.value;
+  const headers = ['PCTS ID','Name','Village','Block','RiskLevel','Status','EDD','VisitDate','Platform','BP','Hb','Sugar','UrineTest','HIV','Syphilis','IVSucrose','FCM','BloodTransfusion','Findings','Action','Ambulance','EnteredBy','EnteredRole'];
   const allRows = [];
   const visitsSnap = await db.collection('hrp_visits').get();
   const visitsByCase = {};
@@ -1806,13 +1426,14 @@ async function exportFullReportCSV(){
     if(!visitsByCase[v.caseId]) visitsByCase[v.caseId] = [];
     visitsByCase[v.caseId].push(v);
   });
-  allCases.forEach(c=>{
+  const cases = eddF ? allCases.filter(c=>matchesEDDFilter(c, eddF)) : allCases;
+  cases.forEach(c=>{
     const visits = visitsByCase[c.id]||[];
     if(!visits.length){
-      allRows.push([c.pctsId,c.name,c.village,c.block,riskOf(c),c.status,'','','','','','','','','','','','','','','','']);
+      allRows.push([c.pctsId,c.name,c.village,c.block,c.riskLevel,c.status,fmtDateDMY(c.edd),'','','','','','','','','','','','','','','']);
     }else{
       visits.forEach(v=>{
-        allRows.push([c.pctsId,c.name,c.village,c.block,riskOf(c),c.status,v.date,v.platform,v.bp,v.hb,v.sugar,v.urineTest,v.hiv,v.syphilis,v.ivSucrose,v.fcm,v.bloodTransfusion,v.findings,v.action,v.ambulance,v.enteredByName,v.enteredByRole]);
+        allRows.push([c.pctsId,c.name,c.village,c.block,c.riskLevel,c.status,fmtDateDMY(c.edd),fmtDateDMY(v.date),v.platform,v.bp,v.hb,v.sugar,v.urineTest,v.hiv,v.syphilis,v.ivSucrose,v.fcm,v.bloodTransfusion,v.findings,v.action,v.ambulance,v.enteredByName,v.enteredByRole]);
       });
     }
   });
