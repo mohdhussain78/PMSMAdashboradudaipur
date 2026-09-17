@@ -694,11 +694,15 @@ function caseCardHTML(c){
   const dueLine = hbncDue
     ? `अगला HBNC: दिन ${hbncDue.day} (${fmtDateDMY(hbncDue.dueDateISO)})`
     : (c.deliveryDate ? 'सभी HBNC भ्रमण पूर्ण' : `अगली देय: ${fmtDateDMY(c.nextDueDate)||'—'}`);
+  const catsHTML = (c.riskCategories&&c.riskCategories.length)
+    ? `<div class="meta" style="margin-top:3px;">${c.riskCategories.map(r=>`<span class="badge red" style="margin:1px 3px 1px 0;font-size:11px;padding:1px 6px;">${esc(r)}</span>`).join('')}</div>`
+    : '';
   return `<div class="casecard risk-${c.riskLevel}" onclick="openCase('${c.id}')">
     <div class="nm">${esc(c.name)} <span class="small">(${c.age||'-'})</span></div>
     <div class="small" style="font-family:'Roboto Mono',monospace;color:#8a7a7a;">PCTS: ${esc(c.pctsId||'—')}</div>
     <div class="meta">${esc(c.village||'')} · ${esc(c.block||'')} · ${esc(c.facility||'')}</div>
     <div class="meta">EDD: ${fmtDateDMY(c.edd)||'—'} · ${dueLine}</div>
+    ${catsHTML}
     <div class="badges">${riskBadge}${statusBadge}</div>
   </div>`;
 }
