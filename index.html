@@ -156,6 +156,10 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
     <section id="tab-dashboard">
       <div class="statrow" id="statRow"></div>
       <div class="panel">
+        <h3>📊 जोखिम श्रेणी अनुसार सक्रिय HRP केस संख्या / Active HRP Cases by Risk Category</h3>
+        <div class="tablewrap"><table class="linelist" id="categoryCountTable"></table></div>
+      </div>
+      <div class="panel">
         <h3>🍼 इस माह व अगले माह में संभावित प्रसव (EDD अनुसार) / Upcoming Deliveries (This & Next Month by EDD)</h3>
         <div class="caselist" id="upcomingDeliveryList"></div>
       </div>
@@ -222,7 +226,7 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
       <div class="panel">
         <h3>नया HRP केस पंजीकरण / Register New HRP Case</h3>
         <div class="grid2">
-          <div class="field"><label>PCTS ID (15 अंक) *</label><input id="r_pcts" maxlength="15" inputmode="numeric" placeholder="15 अंकों की RCH/PCTS ID"></div>
+          <div class="field"><label>PCTS ID *</label><input id="r_pcts" inputmode="numeric" placeholder="RCH/PCTS ID दर्ज करें (केवल अंक)"></div>
           <div class="field"><label>महिला का नाम *</label><input id="r_name"></div>
           <div class="field"><label>पति का नाम</label><input id="r_husband"></div>
           <div class="field"><label>आयु *</label><input id="r_age" type="number"></div>
@@ -255,7 +259,7 @@ table.linelist th{background:var(--maroon-light);color:var(--maroon-dark);positi
         <div class="small" style="margin-bottom:8px;">
           Excel में पहली पंक्ति में ये कॉलम हेडर बिल्कुल इसी नाम से रखें:<br>
           <b>PCTSID, Name, HusbandName, Age, GravidaParity, Village, Block, Subcenter, Facility, ASHAName, ASHAPhone, ANMName, LMP, EDD, RiskLevel, RiskCategory1, RiskCategory2, RiskCategory3, RiskCategory4, RiskCategory5, Notes, NextDueDate</b><br>
-          · <b>PCTSID</b> ठीक 15 अंकों का होना चाहिए — जो PCTS ID पहले से दर्ज है वह पंक्ति स्वतः छोड़ दी जाएगी (डुप्लीकेट नहीं बनेगा)।<br>
+          · <b>PCTSID</b> केवल अंकों (0-9) में होनी चाहिए — कोई निश्चित लंबाई (जैसे 15 अंक) अनिवार्य नहीं है। जो PCTS ID पहले से दर्ज है वह पंक्ति स्वतः छोड़ दी जाएगी (डुप्लीकेट नहीं बनेगा)।<br>
           · <b>RiskLevel</b> में red / yellow / green लिखें (खाली छोड़ने पर yellow माना जाएगा)।<br>
           · <b>एक से अधिक जोखिम श्रेणी के लिए</b> — <code>RiskCategory1, RiskCategory2, RiskCategory3, RiskCategory4, RiskCategory5</code> — इन पाँच अलग-अलग कॉलम में हर एक में एक श्रेणी लिखें (जितनी लागू हों उतने कॉलम भरें, बाकी खाली छोड़ दें)। टेम्पलेट की दूसरी शीट "Risk Categories List" से सही नाम कॉपी-पेस्ट करें ताकि स्पेलिंग सही रहे।<br>
           · तिथियाँ (LMP, EDD, NextDueDate) <code>dd/mm/yyyy</code> प्रारूप में लिखें (जैसे 15/01/2026)।<br>
@@ -676,6 +680,17 @@ function renderDashboard(){
   const udEl = document.getElementById('upcomingDeliveryList');
   if(udEl) udEl.innerHTML = upcomingDeliveries.length ? upcomingDeliveries.map(caseCardHTML).join('') :
     `<div class="emptynote">इस/अगले माह में EDD अनुसार कोई संभावित प्रसव दर्ज नहीं है।</div>`;
+
+  // जोखिम श्रेणी अनुसार सक्रिय केस संख्या
+  const catCounts = {};
+  RISK_CATEGORIES.forEach(cat=>catCounts[cat]=0);
+  active.forEach(c=>(c.riskCategories||[]).forEach(cat=>{ if(catCounts[cat]!==undefined) catCounts[cat]++; }));
+  const catRows = RISK_CATEGORIES.map(cat=>({cat, count:catCounts[cat]})).sort((a,b)=>b.count-a.count);
+  const catEl = document.getElementById('categoryCountTable');
+  if(catEl){
+    catEl.innerHTML = `<thead><tr><th>जोखिम श्रेणी / Risk Category</th><th style="text-align:center;">सक्रिय केस संख्या</th></tr></thead>
+      <tbody>${catRows.map(r=>`<tr><td>${esc(r.cat)}</td><td style="text-align:center;font-weight:600;${r.count>0?'color:var(--maroon-dark);':'color:#aaa;'}">${r.count}</td></tr>`).join('')}</tbody>`;
+  }
 }
 
 /* ================= CASE LIST ================= */
@@ -776,8 +791,8 @@ async function registerCase(){
   const block = document.getElementById('r_block').value;
   const subcenter = document.getElementById('r_subcenter').value.trim();
   const facility = document.getElementById('r_facility').value.trim();
-  if(!/^\d{15}$/.test(pctsId)){
-    errEl.textContent = 'PCTS ID ठीक 15 अंकों की संख्या होनी चाहिए।'; return;
+  if(!/^\d+$/.test(pctsId)){
+    errEl.textContent = 'PCTS ID केवल अंकों (0-9) में होनी चाहिए।'; return;
   }
   if(!name || !age || !village || !block || !subcenter || !facility){
     errEl.textContent = 'कृपया * चिह्नित सभी फ़ील्ड भरें।'; return;
@@ -862,7 +877,7 @@ async function bulkUploadCases(){
     const rowNum = i+2; // 1 = header row
     const pctsId = String(row.PCTSID||row.PctsId||row.pctsid||row['PCTS ID']||'').trim();
     const name = String(row.Name||row.name||'').trim();
-    if(!/^\d{15}$/.test(pctsId)){ failed.push(`पंक्ति ${rowNum} (${name||'—'}) — PCTS ID 15 अंकों का नहीं है`); continue; }
+    if(!/^\d+$/.test(pctsId)){ failed.push(`पंक्ति ${rowNum} (${name||'—'}) — PCTS ID केवल अंकों (0-9) में होनी चाहिए`); continue; }
     if(!name){ failed.push(`पंक्ति ${rowNum} — नाम खाली है`); continue; }
 
     let village = String(row.Village||row.village||'').trim();
@@ -992,7 +1007,7 @@ async function openCase(id, silentRefresh){
     <div id="editDetailsBlock" class="hidden">
       <div class="section-title">मूल विवरण संपादित करें / Edit Details</div>
       <div class="grid2">
-        <div class="field"><label>PCTS ID</label><input id="e_pcts" maxlength="15" value="${esc(c.pctsId||'')}"></div>
+        <div class="field"><label>PCTS ID</label><input id="e_pcts" value="${esc(c.pctsId||'')}"></div>
         <div class="field"><label>महिला का नाम</label><input id="e_name" value="${esc(c.name||'')}"></div>
         <div class="field"><label>पति का नाम</label><input id="e_husband" value="${esc(c.husbandName||'')}"></div>
         <div class="field"><label>आयु</label><input id="e_age" type="number" value="${c.age||''}"></div>
@@ -1165,7 +1180,7 @@ function toggleEditCase(){
 async function saveCaseEdit(id){
   const errEl = document.getElementById('e_err'); errEl.textContent='';
   const pctsId = document.getElementById('e_pcts').value.trim();
-  if(!/^\d{15}$/.test(pctsId)){ errEl.textContent='PCTS ID ठीक 15 अंकों की संख्या होनी चाहिए।'; return; }
+  if(!/^\d+$/.test(pctsId)){ errEl.textContent='PCTS ID केवल अंकों (0-9) में होनी चाहिए।'; return; }
   const dupSnap = await db.collection('hrp_cases').where('pctsId','==', pctsId).get();
   if(dupSnap.docs.some(d=>d.id!==id)){ errEl.textContent='यह PCTS ID किसी और केस में पहले से मौजूद है।'; return; }
   const payload = {
